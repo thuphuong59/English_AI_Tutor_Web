@@ -1,0 +1,44 @@
+@import "tailwindcss";
+
+html, body {
+  height: 100%;
+  margin: 0;
+  font-family: sans-serif;
+}
+ 
+:root {
+  /* Brand */
+  --primary: #98F5E1;    /* Neo Mint */
+  --primary-dark: #5EE6C5;
+  --accent: #6B63FF;     /* Lavender */
+  --accent-soft: #B9B4FF;
+
+  /* UI Surface */
+  --bg-body: #F8FAFC;
+  --bg-panel: #FFFFFF;
+  --bg-sidebar: #F5F8FA;
+  --bg-ai: #F7F8FF;
+  --bg-user: #D7FFE9;
+
+  /* Border */
+  --border-soft: #E6ECF2;
+  --border-accent: #E2E6FF;
+
+  /* Text */
+  --text-main: #1F2937;
+  --text-soft: #6B7385;
+  --text-accent: #6B63FF;
+}
+
+/* Dark mode */
+.dark {
+  --bg-body: #0B0E13;
+  --bg-panel: #12161D;
+  --bg-sidebar: #0F141A;
+  --bg-ai: #171C24;
+  --bg-user: #0F332A;
+  --border-soft: #1E2633;
+  --text-main: #EAF1FF;
+  --text-soft: #9BA3B5;
+  --text-accent: #98F5E1;
+}

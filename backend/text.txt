@@ -1,0 +1,7 @@
+# run venv
+.\venv\Scripts\activate 
+uvicorn fastapi_app.main:app --reload
+# Connect and create table 
+python -m fastapi_app.scripts.init_db 
+# type content 
+python -m fastapi_app.scripts.seed_db 

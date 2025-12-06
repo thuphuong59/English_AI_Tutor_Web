@@ -1,0 +1,5 @@
+.\venv\Scripts\Activate.ps1
+pip install dj-database-url
+python manage.py startapp test
+pip install fastapi uvicorn transformers torch
+uvicorn fastapi_app.main:app --reload

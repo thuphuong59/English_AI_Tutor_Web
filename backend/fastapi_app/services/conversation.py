@@ -1,0 +1,210 @@
+import os
+import json
+import google.generativeai as genai
+from fastapi import UploadFile, HTTPException
+from typing import Optional, List, Dict, Any
+
+from fastapi_app.database import admin_supabase
+from fastapi_app.crud import history as crud_history
+from fastapi_app.crud import scenarios as crud_scenarios
+from fastapi_app.utils.gemini_file_manager import upload_audio_to_gemini
+from fastapi_app.prompts import conversation as prompts
+
+# --- Config ---
+GEMINI_API_KEY = os.getenv("GOOGLE_API_KEY")
+if not GEMINI_API_KEY:
+    raise ValueError("GOOGLE_API_KEY not found.")
+genai.configure(api_key=GEMINI_API_KEY)
+
+MODEL_NAME = "gemini-2.5-flash-preview-09-2025"
+try:
+    chat_model = genai.GenerativeModel(MODEL_NAME)
+    summary_model = genai.GenerativeModel(MODEL_NAME)
+except Exception as e:
+    print(f"Gemini Init Error: {e}")
+    raise e
+
+# --- Wrappers ---
+def get_all_sessions(user_id: str):
+    return crud_history.get_sessions(admin_supabase, user_id)
+
+def get_session_details(session_id: str):
+    return crud_history.get_session_details(admin_supabase, session_id)
+
+def get_scenarios_for_topic(topic: str, level: str):
+    return crud_scenarios.get_scenarios_by_topic_and_level(admin_supabase, topic, level)
+
+def delete_session(session_id: str, user_id: str):
+    crud_history.delete_session(admin_supabase, session_id, user_id)
+
+# --- START ---
+async def start_conversation(mode: str, level: str, scenario_id: Optional[str], topic: Optional[str], user_id: str):
+    topic_to_save = topic
+    greeting_text = ""
+    user_suggestions = []
+
+    if mode == "scenario":
+        if not scenario_id:
+            raise HTTPException(400, "Scenario ID required.")
+        scenario = crud_scenarios.get_scenario_by_id_with_dialogues(admin_supabase, scenario_id)
+        if not scenario:
+            raise HTTPException(404, "Scenario not found.")
+        topic_to_save = scenario["title"]
+        if scenario.get("dialogue_lines"):
+            greeting_text = scenario["dialogue_lines"][0]["line"]
+            user_suggestions = [l["line"] for l in scenario["dialogue_lines"] if l["speaker"] == "user"]
+    else:
+        if not topic: raise HTTPException(400, "Topic required.")
+        
+        prompt = prompts.get_start_conversation_prompt(level, topic)
+        try:
+            response = await chat_model.generate_content_async(prompt)
+            greeting_text = response.text.strip()
+        except Exception:
+            greeting_text = f"Hi! Let's talk about {topic}. How are you?"
+
+    session = crud_history.create_session(admin_supabase, mode, level, topic_to_save, user_id)
+    crud_history.append_message_to_history(admin_supabase, session["id"], {
+        "role": "ai", "text": greeting_text, "type": "greeting", "metadata": {}
+    })
+    return {"greeting": greeting_text, "suggestions": user_suggestions, "session_id": session["id"]}
+
+# --- FREE TALK TEXT ---
+async def generate_free_talk_reply(message: str, topic: str, level: str, session_id: str):
+    crud_history.append_message_to_history(admin_supabase, session_id, {"role": "user", "text": message, "type": "text"})
+    
+    session_data = crud_history.get_session_details(admin_supabase, session_id)
+    messages = session_data.get("messages", [])
+    context_text = "\n".join(f"{m['role']}: {m.get('text','')}" for m in messages[-8:])
+
+
+    full_prompt = prompts.get_free_talk_text_prompt(level, topic, context_text, message)
+    
+    try:
+        result = await chat_model.generate_content_async(full_prompt)
+        parsed = json.loads(result.text.strip().replace("```json", "").replace("```", ""))
+    except Exception:
+        parsed = {"reply": "Error generating reply.", "feedback": "", "metadata": {}}
+
+    crud_history.append_message_to_history(admin_supabase, session_id, {"role": "ai", "text": parsed.get("feedback"), "type": "feedback", "metadata": parsed.get("metadata")})
+    crud_history.append_message_to_history(admin_supabase, session_id, {"role": "ai", "text": parsed.get("reply"), "type": "reply"})
+
+    return parsed
+
+# --- FREE TALK VOICE ---
+async def process_free_talk_voice(audio: UploadFile, topic: str, level: str, session_id: str):
+    gemini_file = await upload_audio_to_gemini(audio)
+
+    session_data = crud_history.get_session_details(admin_supabase, session_id)
+    messages = session_data.get("messages", [])
+    context_text = "\n".join(f"{m['role']}: {m.get('text','')}" for m in messages[-6:])
+
+    prompt = prompts.get_free_talk_voice_prompt(level, topic, context_text)
+
+    try:
+        response = await chat_model.generate_content_async([prompt, gemini_file])
+        text_res = response.text.strip().replace("```json", "").replace("```", "")
+        parsed = json.loads(text_res)
+    except Exception as e:
+        print(f"Gemini FreeTalk Error: {e}")
+        parsed = {
+            "transcribed_text": "(Audio Error)", "reply": "Sorry, audio error.", "feedback": "", "metadata": {}
+        }
+
+    # Save DB...
+    crud_history.append_message_to_history(admin_supabase, session_id, {
+        "role": "user", "text": parsed.get("transcribed_text"), "type": "speech"
+    })
+    crud_history.append_message_to_history(admin_supabase, session_id, {
+        "role": "ai", "text": parsed.get("feedback"), "type": "feedback", "metadata": parsed.get("metadata")
+    })
+    crud_history.append_message_to_history(admin_supabase, session_id, {
+        "role": "ai", "text": parsed.get("reply"), "type": "reply"
+    })
+    return parsed
+
+# --- SCENARIO VOICE ---
+async def evaluate_scenario_voice(audio: UploadFile, scenario_id: str, level: str, turn: int, session_id: str):
+    gemini_file = await upload_audio_to_gemini(audio)
+
+    scenario = crud_scenarios.get_scenario_by_id_with_dialogues(admin_supabase, scenario_id)
+    if not scenario: raise HTTPException(404, "Scenario not found")
+    
+    correct_line = next((l for l in scenario["dialogue_lines"] if l["turn"] == turn and l["speaker"] == "user"), None)
+    correct_text = correct_line["line"] if correct_line else "(No expected line)"
+
+    prompt = prompts.get_scenario_voice_prompt(level, correct_text)
+
+    try:
+        response = await chat_model.generate_content_async([prompt, gemini_file])
+        text_res = response.text.strip().replace("```json", "").replace("```", "")
+        parsed = json.loads(text_res)
+    except Exception as e:
+        print(f"Gemini Scenario Error: {e}")
+        parsed = {
+            "transcribed_text": "(Audio Error)", "immediate_feedback": "Error.", "metadata": {}
+        }
+
+    crud_history.append_message_to_history(admin_supabase, session_id, {
+        "role": "user", "text": parsed.get("transcribed_text"), "type": "speech"
+    })
+    crud_history.append_message_to_history(admin_supabase, session_id, {
+        "role": "ai", "text": parsed.get("immediate_feedback"), "type": "feedback", "metadata": parsed.get("metadata")
+    })
+
+    next_ai_line = next((l for l in scenario["dialogue_lines"] if l["turn"] == turn + 1 and l["speaker"] == "ai"), None)
+    next_ai_text = next_ai_line["line"] if next_ai_line else "Scenario completed!"
+    
+    crud_history.append_message_to_history(admin_supabase, session_id, {
+        "role": "ai", "text": next_ai_text, "type": "reply"
+    })
+
+    next_user_line = next((l for l in scenario["dialogue_lines"] if l["turn"] == turn + 2 and l["speaker"] == "user"), None)
+    next_user_text = next_user_line["line"] if next_user_line else None
+
+    return {
+        "transcribed_text": parsed.get("transcribed_text"),
+        "immediate_feedback": parsed.get("immediate_feedback"),
+        "next_ai_reply": next_ai_text,
+        "next_user_suggestion": next_user_text,
+        "is_complete": not bool(next_user_text),
+        "metadata": parsed.get("metadata")
+    }
+
+# --- SUMMARIZE ---
+async def summarize_conversation(session_id: str, topic: str, level: str, messages: Optional[List[Dict[str, Any]]] = None):
+    session_data = crud_history.get_session_details(admin_supabase, session_id)
+    if not session_data: raise HTTPException(404, "Session not found")
+    
+    mode = session_data.get("mode", "free")
+    if not messages: messages = session_data.get("messages", [])
+
+    transcript_lines = []
+    for m in messages:
+        role = m.get('role', '').upper()
+        text = m.get('text', '')
+        msg_type = m.get('type', '')
+        metadata = m.get('metadata') or {}
+
+        if role == 'SYSTEM': continue
+        if role == 'USER': transcript_lines.append(f"[USER]: {text}")
+        elif msg_type == 'feedback':
+            pron_score = metadata.get('pronunciation_score', 'N/A')
+            transcript_lines.append(f"   >>> [LOG]: Pronunciation={pron_score} | Feedback='{text}'")
+        elif role == 'AI': transcript_lines.append(f"[AI]: {text}")
+
+    transcript = "\n".join(transcript_lines)
+    if not transcript.strip(): return {"summary_text": "No content.", "summary_metadata": {}}
+
+    prompt = prompts.get_summary_prompt(mode, level, topic, transcript)
+
+    try:
+        res = await summary_model.generate_content_async(prompt)
+        text_res = res.text.strip().replace("```json", "").replace("```", "")
+        parsed = json.loads(text_res)
+    except Exception:
+        parsed = {"summary_text": "Error summarizing.", "summary_metadata": {}}
+
+    updated_msgs = messages + [{"role": "ai", "text": parsed.get("summary_text"), "type": "summary", "metadata": parsed.get("summary_metadata")}]
+    crud_history.update_session_summary(admin_supabase, session_id, parsed.get("summary_text"), updated_msgs)
+    return parsed

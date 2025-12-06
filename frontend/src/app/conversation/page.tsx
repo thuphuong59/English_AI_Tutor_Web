@@ -1,0 +1,603 @@
+"use client";
+
+import { useState, FC, useEffect } from "react";
+import { Award, PlayCircle, ArrowLeft, RefreshCw, Loader2, Menu, PanelLeftOpen } from "lucide-react";
+import ModeSelector from "./components/ModeSelector";
+import LevelSelector from "./components/LevelSelector";
+import TopicSelector from "./components/TopicSelector";
+import ChatArea from "./components/ChatArea";
+import { DialogueLine } from "./components/DialogueLine";
+import ChatInput from "./components/ChatInput";
+import HistorySidebar from "./components/HistorySideBar";
+import * as api from "../../services/api";
+import { analyzeConversationSession } from "../../services/vocabService";
+import { DisplayMessage, Scenario, HistorySession } from "./types";
+
+const ConversationPage: FC = () => {
+  // Sidebar mặc định mở trên màn hình to, đóng trên mobile
+  const [isSidebarOpen, setIsSidebarOpen] = useState(true); 
+  
+  // --- STATE MANAGEMENT ---
+  const [sessionId, setSessionId] = useState<string | null>(null);
+  const [mode, setMode] = useState<"scenario" | "free">("scenario");
+  const [level, setLevel] = useState("Beginner");
+  const [view, setView] = useState<"topics" | "scenarios">("topics");
+  const [selectedTopic, setSelectedTopic] = useState<string | null>(null);
+  const [scenarios, setScenarios] = useState<Scenario[]>([]);
+  const [activeScenario, setActiveScenario] = useState<Scenario | null>(null);
+  const [messages, setMessages] = useState<DisplayMessage[]>([]);
+  const [suggestions, setSuggestions] = useState<string[]>([]);
+  const [input, setInput] = useState("");
+  const [chatLoading, setChatLoading] = useState(false);
+  const [conversationStarted, setConversationStarted] = useState(false);
+  const [currentTurn, setCurrentTurn] = useState(2);
+  const [isScenarioComplete, setIsScenarioComplete] = useState(false);
+  const [pendingStep, setPendingStep] = useState<{
+    aiReply: DisplayMessage;
+    nextSuggestion: string | null;
+  } | null>(null);
+  const [isViewingHistory, setIsViewingHistory] = useState(false);
+  const [sessions, setSessions] = useState<HistorySession[]>([]);
+  const [historyLoading, setHistoryLoading] = useState(true);
+  const [deletingId, setDeletingId] = useState<string | null>(null);
+  const [isAnalyzing, setIsAnalyzing] = useState(false);
+
+  // --- API & EFFECTS ---
+  const fetchHistory = async () => {
+    setHistoryLoading(true);
+    try {
+      const historyList = await api.getHistoryList();
+      setSessions(historyList);
+    } catch (error) {
+      console.error("Failed to fetch history:", error);
+    } finally {
+      setHistoryLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    fetchHistory();
+    // Tự động đóng sidebar trên mobile khi load
+    if (window.innerWidth < 1024) setIsSidebarOpen(false);
+  }, []);
+
+  // --- ACTIONS ---
+  const speak = (text: string) => {
+    if (!("speechSynthesis" in window)) return;
+    window.speechSynthesis.cancel();
+    const utterance = new SpeechSynthesisUtterance(text);
+    utterance.lang = "en-US";
+    window.speechSynthesis.speak(utterance);
+  };
+
+  const resetConversation = () => {
+    setIsViewingHistory(false);
+    setMessages([]);
+    setSuggestions([]);
+    setConversationStarted(false);
+    setCurrentTurn(2);
+    setIsScenarioComplete(false);
+    setPendingStep(null);
+    setView("topics");
+    setSelectedTopic(null);
+    setActiveScenario(null);
+    setScenarios([]);
+    setInput("");
+    setSessionId(null);
+  };
+
+  const handleLevelChange = (newLevel: string) => setLevel(newLevel);
+  const handleModeChange = (newMode: "scenario" | "free") => setMode(newMode);
+
+  const handleTopicSelect = async (topic: string) => {
+    setSelectedTopic(topic);
+    if (mode === "scenario") {
+      setChatLoading(true);
+      try {
+        const fetchedScenarios = await api.getScenarios(topic, level);
+        if (fetchedScenarios.length > 0) {
+          setScenarios(fetchedScenarios);
+          setView("scenarios");
+        } else {
+          alert(`No scenarios found for "${topic}" at this level.`);
+          setSelectedTopic(null);
+        }
+      } catch (e) {
+        alert(String(e));
+      } finally {
+        setChatLoading(false);
+      }
+    } else {
+      handleStart(null, topic);
+    }
+  };
+
+  const handleBackToTopics = () => {
+    setView("topics");
+    setSelectedTopic(null);
+    setScenarios([]);
+  };
+
+  const handleStart = async (scenario: Scenario | null, freeTalkTopic?: string) => {
+    setIsViewingHistory(false);
+    const topic = scenario?.title || freeTalkTopic;
+    if (!topic) return;
+    setChatLoading(true);
+    try {
+      const res = await api.startConversation(mode, level, scenario?.id, freeTalkTopic);
+      const sessionIdFromApi = res.session_id ?? null;
+      setSessionId(sessionIdFromApi);
+      if (scenario) setActiveScenario(scenario);
+      if (freeTalkTopic) setSelectedTopic(freeTalkTopic);
+      
+      const greeting = res.greeting ?? "";
+      setMessages([{ role: "ai", text: greeting, type: "greeting" }]);
+      if (greeting) speak(greeting);
+      
+      const firstSuggestion = Array.isArray(res.suggestions) && res.suggestions.length > 0 ? res.suggestions[0] : undefined;
+      if (mode === "scenario" && firstSuggestion) setSuggestions([firstSuggestion]);
+      
+      setConversationStarted(true);
+      setCurrentTurn(2);
+      setIsScenarioComplete(false);
+      setPendingStep(null);
+      fetchHistory();
+      setSessionId(res.session_id ?? null);
+      if (window.innerWidth < 1024) setIsSidebarOpen(false);
+    } catch (e) {
+      alert(String(e));
+    } finally {
+      setChatLoading(false);
+    }
+  };
+
+  const handleLoadSession = async (selectedSessionId: string) => {
+    setIsViewingHistory(true);
+    if (chatLoading || sessionId === selectedSessionId) return;
+    setChatLoading(true);
+    try {
+      const details = await api.getConversationDetails(selectedSessionId);
+      setSessionId(selectedSessionId);
+      const normalized: DisplayMessage[] = (details.messages ?? []).map((m: any) => ({
+        role: m.role as "user" | "ai",
+        text: (m.text ?? "") as string,
+        type: (m.type as any) ?? undefined,
+        audioUrl: (m.audioUrl as string) ?? undefined,
+        metadata: (m.metadata as any) ?? undefined,
+      }));
+      setMessages(normalized);
+      setMode(details.mode as "scenario" | "free");
+      setLevel(details.level);
+      setSelectedTopic(details.topic);
+      setConversationStarted(true);
+      setView("topics");
+      setIsScenarioComplete(false);
+      setPendingStep(null);
+      setInput("");
+      setSuggestions([]);
+      if (window.innerWidth < 1024) setIsSidebarOpen(false);
+    } catch (e) {
+      alert(String(e));
+    } finally {
+      setChatLoading(false);
+    }
+  };
+
+  const handlePracticeAgain = () => {
+    if (chatLoading) return;
+    if (mode === "scenario") {
+      setMessages([]);
+      setSuggestions([]);
+      setConversationStarted(false);
+      setCurrentTurn(2);
+      setIsScenarioComplete(false);
+      setPendingStep(null);
+      setSessionId(null);
+      setIsViewingHistory(false);
+      if (selectedTopic) {
+        handleTopicSelect(selectedTopic);
+      } else {
+        resetConversation();
+      }
+    } else {
+      handleStart(null, selectedTopic ?? undefined);
+    }
+  };
+
+  const handleSend = async () => {
+    if (isViewingHistory) return;
+    const topic = selectedTopic || activeScenario?.title;
+    if (!input.trim() || !topic || !sessionId || mode !== "free") return;
+
+    const userMessage: DisplayMessage = { role: "user", text: input.trim() };
+    const newHistory = [...messages, userMessage];
+    setMessages(newHistory);
+    setInput("");
+    setChatLoading(true);
+
+    try {
+      const res = await api.sendFreeTalkMessage(userMessage.text, newHistory, topic, level, sessionId);
+      const feedbackText = res.feedback ?? "";
+      const replyText = res.reply ?? "";
+      const metadata = res.metadata ?? undefined;
+
+      const newMsgs: DisplayMessage[] = [
+        ...(feedbackText ? [{ role: "ai" as const, text: feedbackText, type: "feedback" as const, metadata }] : []),
+        ...(replyText ? [{ role: "ai" as const, text: replyText, type: "reply" as const }] : []),
+      ];
+
+      setMessages((p) => [...p, ...newMsgs]);
+      if (replyText) speak(replyText);
+    } catch (e) {
+      setMessages((p) => [...p, { role: "ai", text: `Error: ${String(e)}` }]);
+    } finally {
+      setChatLoading(false);
+    }
+  };
+
+  const handleVoiceMessage = async (audioBlob: Blob, audioUrl: string) => {
+    if (isViewingHistory) return;
+    const topic = selectedTopic || activeScenario?.title;
+    if (!topic || !sessionId) return;
+
+    setChatLoading(true);
+    setSuggestions([]);
+
+    const userAudioMsg: DisplayMessage = {
+      role: "user",
+      text: "",
+      type: "audio_input",
+      audioUrl: audioUrl,
+    };
+    setMessages((prev) => [...prev, userAudioMsg]);
+
+    try {
+      let transcribedText = "";
+      let newAiMessages: DisplayMessage[] = [];
+
+      if (mode === "scenario" && activeScenario) {
+        const res = await api.sendAndEvaluateVoice(audioBlob, activeScenario.id, level, currentTurn, sessionId);
+        transcribedText = res.transcribed_text ?? "(Audio)";
+        const feedback = res.immediate_feedback ?? "";
+        const nextReply = res.next_ai_reply ?? "";
+        const metadata = res.metadata ?? undefined;
+        const nextSuggestion = res.next_user_suggestion ?? null;
+
+        newAiMessages.push({ role: "ai", text: feedback, type: "feedback", metadata });
+
+        if (res.is_complete) {
+          setIsScenarioComplete(true);
+          newAiMessages.push({ role: "ai", text: nextReply, type: "reply" });
+        } else {
+          setPendingStep({
+            aiReply: { role: "ai", text: nextReply, type: "reply" },
+            nextSuggestion,
+          });
+        }
+
+      } else if (mode === "free" && topic) {
+        const contextHistory = messages; 
+        const res = await api.sendFreeTalkVoice(audioBlob, contextHistory, topic, level, sessionId);
+        transcribedText = res.transcribed_text ?? "(Audio)";
+        const feedback = res.feedback ?? "";
+        const reply = res.reply ?? "";
+        const metadata = res.metadata ?? undefined;
+
+        newAiMessages.push({ role: "ai", text: feedback, type: "feedback", metadata });
+        newAiMessages.push({ role: "ai", text: reply, type: "reply" });
+        if (reply) speak(reply);
+      }
+
+      setMessages((prevMessages) => {
+        const updatedMessages = [...prevMessages];
+        const lastUserIndex = updatedMessages.length - 1;
+        if (updatedMessages[lastUserIndex].role === 'user') {
+             updatedMessages[lastUserIndex] = { ...updatedMessages[lastUserIndex], text: transcribedText };
+        }
+        return [...updatedMessages, ...newAiMessages];
+      });
+
+    } catch (e) {
+      setMessages((p) => [...p, { role: "ai", text: `Error processing audio: ${String(e)}` }]);
+    } finally {
+      setChatLoading(false);
+    }
+  };
+
+  const handleContinueScenario = () => {
+    if (isViewingHistory || !pendingStep) return;
+    const safeAiReply: DisplayMessage = {
+      role: "ai",
+      text: pendingStep.aiReply.text ?? "",
+      type: pendingStep.aiReply.type,
+      metadata: pendingStep.aiReply.metadata,
+    };
+    setMessages((p) => [...p, safeAiReply]);
+    if (safeAiReply.text) speak(safeAiReply.text);
+    if (pendingStep.nextSuggestion) setSuggestions([pendingStep.nextSuggestion]);
+    setCurrentTurn((p) => p + 2);
+    setPendingStep(null);
+  };
+
+  const handleGetFinalFeedback = async () => {
+    if (isViewingHistory) return;
+    const topic = selectedTopic || activeScenario?.title;
+    if (!topic || !sessionId) return;
+
+    setChatLoading(true);
+    setIsAnalyzing(true);
+
+    try {
+      const res = await api.getConversationSummary(messages, level, topic, sessionId);
+      const summaryText = res.summary_text ?? "";
+      setMessages((p) => [...p, { role: "ai", text: summaryText, type: "summary", metadata: res.summary_metadata }]);
+      setIsScenarioComplete(false);
+
+      if (mode === "free") {
+        try {
+          await analyzeConversationSession(sessionId);
+        } catch (analysisError) {
+          console.error("Error analyzing vocab:", analysisError);
+        }
+      }
+    } catch (e) {
+      alert(String(e));
+    } finally {
+      setChatLoading(false);
+      setIsAnalyzing(false);
+    }
+  };
+
+  const handleDeleteSession = async (sessionIdToDelete: string, sessionTopic: string) => {
+    if (deletingId) return;
+    const confirmed = window.confirm(`Delete conversation "${sessionTopic}"?`);
+    if (confirmed) {
+      setDeletingId(sessionIdToDelete);
+      try {
+        await api.deleteConversation(sessionIdToDelete);
+        setSessions((prev) => prev.filter((s) => s.id !== sessionIdToDelete));
+        if (sessionId === sessionIdToDelete) resetConversation();
+      } catch (error) {
+        alert(`Error: ${error instanceof Error ? error.message : String(error)}`);
+      } finally {
+        setDeletingId(null);
+      }
+    }
+  };
+
+  // --- RENDER ---
+  return (
+    <div className="h-screen w-full flex bg-[#F0F4F8] text-slate-800 font-sans overflow-hidden">
+      
+      {/* 1. SIDEBAR with Toggle Logic */}
+      <HistorySidebar
+        sessions={sessions}
+        loading={historyLoading}
+        deletingId={deletingId}
+        onSessionSelect={handleLoadSession}
+        activeSessionId={sessionId}
+        onNewConversation={resetConversation}
+        onDelete={handleDeleteSession}
+        isOpen={isSidebarOpen}
+        onClose={() => setIsSidebarOpen(false)}
+      />
+
+      {/* 2. MAIN CONTENT (Push content when sidebar open) */}
+      <main className={`flex-1 flex flex-col relative h-full min-w-0 transition-all duration-300 ease-in-out ${isSidebarOpen ? 'lg:ml-80' : 'ml-0'}`}>
+        
+        {/* Toggle Sidebar Button (Top Left) */}
+        {!isSidebarOpen && (
+          <button 
+            onClick={() => setIsSidebarOpen(true)}
+            className="absolute top-6 left-6 z-50 p-2.5 bg-white border border-slate-200 rounded-xl shadow-md text-slate-600 hover:text-blue-600 hover:border-blue-200 transition-all group"
+            title="Open History"
+          >
+            <PanelLeftOpen size={20} className="group-hover:scale-110 transition-transform" />
+          </button>
+        )}
+
+        {!conversationStarted ? (
+          
+          // =========================
+          // LOBBY (Clean & Simple)
+          // =========================
+          <div className="flex-1 overflow-y-auto custom-scrollbar">
+            <div className="max-w-5xl mx-auto w-full px-6 py-12 md:px-12">
+              
+              <div className="mb-10 text-center lg:text-left">
+                <h1 className="text-3xl font-extrabold text-slate-900 mb-2">
+                  Start Conversation
+                </h1>
+                <p className="text-slate-500 text-lg">
+                  Customize your learning session.
+                </p>
+              </div>
+
+              {/* Controls Panel */}
+              <div className="bg-white rounded-3xl p-8 shadow-sm border border-slate-200 mb-8 space-y-8">
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-10">
+                  <div className="space-y-4">
+                    <label className="text-xs font-bold text-slate-400 uppercase tracking-wider ml-1">Mode</label>
+                    <ModeSelector mode={mode} onModeChange={handleModeChange} />
+                  </div>
+                  <div className="space-y-4">
+                    <label className="text-xs font-bold text-slate-400 uppercase tracking-wider ml-1">Level</label>
+                    <LevelSelector level={level} onLevelChange={handleLevelChange} />
+                  </div>
+                </div>
+              </div>
+
+              {/* Selection Area */}
+              <div className="space-y-6">
+                <div className="flex items-center justify-between">
+                  <h2 className="text-xl font-bold text-slate-800">
+                    {view === 'topics' ? "Select Topic" : "Select Scenario"}
+                  </h2>
+                  
+                  {view === 'scenarios' && (
+                    <button
+                      onClick={handleBackToTopics}
+                      className="px-4 py-2 rounded-lg bg-slate-100 hover:bg-slate-200 text-slate-700 font-medium text-sm transition-colors flex items-center gap-2"
+                    >
+                      <ArrowLeft size={16} /> Back
+                    </button>
+                  )}
+                </div>
+
+                {view === "topics" ? (
+                  <TopicSelector
+                    topic={selectedTopic}
+                    onTopicChange={handleTopicSelect}
+                    mode={mode}
+                  />
+                ) : (
+                  // Scenario List - Simple Cards
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    {chatLoading ? (
+                      <div className="col-span-full py-16 text-center text-slate-400">
+                        <Loader2 className="w-8 h-8 animate-spin mx-auto mb-2 text-blue-500" />
+                        <p>Loading...</p>
+                      </div>
+                    ) : scenarios.length === 0 ? (
+                      <div className="col-span-full py-16 text-center text-slate-400 bg-slate-50 rounded-2xl border border-dashed border-slate-200">
+                        No scenarios found.
+                      </div>
+                    ) : (
+                      scenarios.map((s) => (
+                        <button
+                          key={s.id}
+                          onClick={() => handleStart(s)}
+                          className="group text-left p-6 rounded-2xl bg-white border border-slate-200 hover:border-blue-500 hover:shadow-md transition-all duration-200"
+                        >
+                          <h3 className="font-bold text-lg text-slate-800 group-hover:text-blue-700 transition-colors mb-2">
+                            {s.title}
+                          </h3>
+                          <div className="flex items-center gap-2">
+                            <span className="text-xs font-semibold bg-slate-100 text-slate-500 px-2 py-1 rounded">
+                              {level}
+                            </span>
+                            <span className="text-xs font-semibold bg-blue-50 text-blue-600 px-2 py-1 rounded uppercase">
+                              Scenario
+                            </span>
+                          </div>
+                        </button>
+                      ))
+                    )}
+                  </div>
+                )}
+              </div>
+            </div>
+          </div>
+        ) : (
+          
+          // =========================
+          // CHAT INTERFACE
+          // =========================
+          <div className="flex-1 flex flex-col h-full bg-[#FAFBFC] relative">
+            
+            {/* Header */}
+            <header className="h-16 bg-white border-b border-slate-100 px-6 flex items-center justify-between z-20 flex-shrink-0">
+              <div className="flex items-center gap-4">
+                {!isSidebarOpen && (
+                   <button 
+                    onClick={() => setIsSidebarOpen(true)}
+                    className="p-2 hover:bg-slate-100 rounded-lg text-slate-500 transition-colors"
+                  >
+                    <Menu size={20} />
+                  </button>
+                )}
+                
+                <div>
+                  <h4 className="font-bold text-lg text-slate-800 leading-none">
+                    {activeScenario?.title || selectedTopic || "Conversation"}
+                  </h4>
+                  <div className="flex items-center gap-2 mt-1">
+                    <span className="text-[10px] uppercase font-bold tracking-wider px-1.5 py-0.5 rounded bg-slate-100 text-slate-500">
+                      {mode}
+                    </span>
+                    <span className="text-[10px] uppercase font-bold tracking-wider px-1.5 py-0.5 rounded bg-slate-100 text-slate-500">
+                      {level}
+                    </span>
+                  </div>
+                </div>
+              </div>
+              
+              <button 
+                onClick={resetConversation}
+                className="px-4 py-2 bg-slate-100 hover:bg-red-50 text-slate-600 hover:text-red-600 rounded-lg text-sm font-medium transition-colors"
+              >
+                Exit
+              </button>
+            </header>
+
+            {/* Chat Area */}
+            <div className="flex-1 overflow-y-auto px-4 py-6 scroll-smooth">
+              <div className="max-w-3xl mx-auto w-full h-full pb-32">
+                <ChatArea
+                  messages={messages}
+                  loading={chatLoading}
+                  onSpeak={speak}
+                />
+              </div>
+            </div>
+
+            {/* Input Area */}
+            <div className="absolute bottom-0 left-0 right-0 z-30 bg-white border-t border-slate-200 pb-6 pt-4 px-4 shadow-[0_-4px_20px_rgba(0,0,0,0.02)]">
+              <div className="max-w-3xl mx-auto w-full">
+                
+                {/* Suggestions / Actions */}
+                {(isViewingHistory || pendingStep || isScenarioComplete || (mode === "scenario" && suggestions.length > 0) || (mode === "free" && !isScenarioComplete)) && (
+                  <div className="mb-4">
+                    {mode === "scenario" && !isScenarioComplete && !pendingStep && suggestions.length > 0 && !isViewingHistory && (
+                      <div className="mb-4 bg-slate-50 p-3 rounded-xl border border-slate-100">
+                        <p className="text-xs font-bold text-slate-400 uppercase tracking-wide mb-2 pl-1">Suggestion</p>
+                        <div className="space-y-2">
+                          {suggestions.map((sug, idx) => (
+                            <DialogueLine key={idx} text={sug} speaker="user" />
+                          ))}
+                        </div>
+                      </div>
+                    )}
+
+                    <div className="flex justify-center gap-3">
+                      {isViewingHistory ? (
+                        <button onClick={handlePracticeAgain} disabled={chatLoading} className="flex items-center gap-2 bg-blue-600 hover:bg-blue-700 text-white px-5 py-2.5 rounded-full font-bold shadow-md transition">
+                          <RefreshCw size={18} /> Practice Again
+                        </button>
+                      ) : (
+                        <>
+                          {pendingStep && (
+                            <button onClick={handleContinueScenario} className="flex items-center gap-2 bg-emerald-600 hover:bg-emerald-700 text-white px-6 py-2.5 rounded-full font-bold shadow-md transition">
+                              <PlayCircle size={18} /> Continue
+                            </button>
+                          )}
+                          {(isScenarioComplete || (mode === "free" && !isScenarioComplete)) && (
+                            <button onClick={handleGetFinalFeedback} disabled={chatLoading || isAnalyzing} className="flex items-center gap-2 bg-indigo-600 hover:bg-indigo-700 text-white px-6 py-2.5 rounded-full font-bold shadow-md transition disabled:opacity-50">
+                              {isAnalyzing ? <Loader2 size={18} className="animate-spin" /> : <Award size={18} />}
+                              {isAnalyzing ? "Analyzing..." : "Finish Session"}
+                            </button>
+                          )}
+                        </>
+                      )}
+                    </div>
+                  </div>
+                )}
+
+                <ChatInput
+                  mode={mode}
+                  input={input}
+                  onInputChange={setInput}
+                  onSend={handleSend}
+                  loading={chatLoading || !!pendingStep}
+                  onVoiceMessage={handleVoiceMessage}
+                />
+              </div>
+            </div>
+          </div>
+        )}
+      </main>
+    </div>
+  );
+};
+
+export default ConversationPage;
