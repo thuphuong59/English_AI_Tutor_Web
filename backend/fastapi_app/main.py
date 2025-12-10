@@ -8,9 +8,8 @@ from fastapi_app.routers import (
     decks, public_decks, grammar_check, quizgame
 )
 from fastapi_app.routers import audio
-# Thêm imports từ phiên bản đến (bỏ đi các imports bị trùng)
 from fastapi_app.routers import test_router, check_grammar_router, speech_router, assessment_router
-# Lưu ý: 'auth_router' trùng với 'auth' đã có, nên tôi dùng 'auth'
+
 
 BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 ENV_PATH = os.path.join(BASE_DIR, ".env")
@@ -32,7 +31,6 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# Đính kèm tất cả các Router (Kết hợp HEAD và phiên bản đến)
 # Routers từ HEAD:
 app.include_router(auth.router)
 app.include_router(conversation.router)
@@ -48,7 +46,6 @@ app.include_router(audio.router, prefix="/audio", tags=["audio"])
 # Routers từ phiên bản đến:
 app.include_router(test_router.router)
 app.include_router(check_grammar_router.router)
-# Auth router đã có, nên không include lại
 app.include_router(speech_router.router)
 app.include_router(assessment_router.router)
 

@@ -5,7 +5,7 @@ from fastapi_app.schemas.test_schemas import PreferenceData, FinalAssessmentSubm
 import os
 import json
 import logging
-from google import genai
+import google.generativeai as genai
 from google.genai import types as g_types
 from starlette.concurrency import run_in_threadpool
 import base64, mimetypes
@@ -55,7 +55,7 @@ async def run_stt_and_analysis_sync(audio_path: str, client):
         "transcript": transcript,
         "word_count": word_count
     }
-async def analyze_transcript_with_gemini(transcript: str, client: genai.Client) -> str:
+async def analyze_transcript_with_gemini(transcript: str) -> str:
     """Gọi Gemini để đánh giá ngữ pháp/từ vựng trong transcript của người dùng."""
     analysis_prompt = f"Phân tích văn bản: '{transcript}' về lỗi ngữ pháp, chất lượng từ vựng, và đưa ra 2 gợi ý cải thiện."
     try:

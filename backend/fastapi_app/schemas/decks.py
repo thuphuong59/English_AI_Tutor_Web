@@ -1,6 +1,6 @@
 from pydantic import BaseModel, Field
 from typing import List, Literal, Optional
-from datetime import date
+from datetime import date, datetime
 from fastapi_app.schemas.vocabulary import VocabularyStats, WordInDB
 
 # --- Deck Schemas ---
@@ -102,3 +102,8 @@ class SmartQuestion(BaseModel):
 
 class QuizFeedbackRequest(BaseModel):
     missed_words: List[str] # Frontend chỉ cần gửi list các từ sai
+
+class QuizResultCreate(BaseModel):
+    deck_id: int | None = None
+    score: int
+    total_questions: int

@@ -15,7 +15,8 @@ export default function VocabularyDashboardPage() {
   const [activeTab, setActiveTab] = useState<'decks' | 'suggestions' | 'public'>('decks');
 
   // Gọi cả 3 API song song
-  const { data: decks, error: decksError } = useSWR<DeckWithStats[]>('/decks', fetcher);
+  // QUAN TRỌNG: Lấy hàm `mutate` (đặt tên là mutateDecks) để reload lại API này
+  const { data: decks, error: decksError, mutate: mutateDecks } = useSWR<DeckWithStats[]>('/decks', fetcher);
   const { data: suggestions, error: suggestionsError } = useSWR<Suggestion[]>('/vocabulary/suggestions', fetcher);
   const { data: publicDecks, error: publicDecksError } = useSWR<PublicDeck[]>('/public-decks', fetcher);
 
@@ -130,7 +131,12 @@ export default function VocabularyDashboardPage() {
         )}
       </div>
 
-      <AddNewDeckModal isOpen={isModalOpen} onClose={() => setIsModalOpen(false)} />
+      <AddNewDeckModal 
+        isOpen={isModalOpen} 
+        onClose={() => setIsModalOpen(false)}
+        // QUAN TRỌNG: Truyền hàm mutateDecks vào đây để reload dữ liệu sau khi tạo xong
+        onSuccess={() => mutateDecks()}
+      />
     </>
   );
 }

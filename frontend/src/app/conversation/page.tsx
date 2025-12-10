@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, FC, useEffect } from "react";
-import { Award, PlayCircle, ArrowLeft, RefreshCw, Loader2, Menu, PanelLeftOpen } from "lucide-react";
+import { Award, PlayCircle, ArrowLeft, RefreshCw, Loader2, Menu, Sparkles } from "lucide-react";
 import ModeSelector from "./components/ModeSelector";
 import LevelSelector from "./components/LevelSelector";
 import TopicSelector from "./components/TopicSelector";
@@ -14,7 +14,6 @@ import { analyzeConversationSession } from "../../services/vocabService";
 import { DisplayMessage, Scenario, HistorySession } from "./types";
 
 const ConversationPage: FC = () => {
-  // Sidebar mặc định mở trên màn hình to, đóng trên mobile
   const [isSidebarOpen, setIsSidebarOpen] = useState(true); 
   
   // --- STATE MANAGEMENT ---
@@ -57,7 +56,6 @@ const ConversationPage: FC = () => {
 
   useEffect(() => {
     fetchHistory();
-    // Tự động đóng sidebar trên mobile khi load
     if (window.innerWidth < 1024) setIsSidebarOpen(false);
   }, []);
 
@@ -367,9 +365,9 @@ const ConversationPage: FC = () => {
 
   // --- RENDER ---
   return (
-    <div className="h-screen w-full flex bg-[#F0F4F8] text-slate-800 font-sans overflow-hidden">
+    <div className="h-screen w-full flex bg-[#F8FAFC] text-slate-800 font-sans overflow-hidden">
       
-      {/* 1. SIDEBAR with Toggle Logic */}
+      {/* 1. SIDEBAR */}
       <HistorySidebar
         sessions={sessions}
         loading={historyLoading}
@@ -382,76 +380,53 @@ const ConversationPage: FC = () => {
         onClose={() => setIsSidebarOpen(false)}
       />
 
-      {/* 2. MAIN CONTENT (Push content when sidebar open) */}
+      {/* 2. MAIN CONTENT */}
       <main className={`flex-1 flex flex-col relative h-full min-w-0 transition-all duration-300 ease-in-out ${isSidebarOpen ? 'lg:ml-80' : 'ml-0'}`}>
         
-        {/* Toggle Sidebar Button (Top Left) */}
+        {/* Toggle Sidebar Button */}
         {!isSidebarOpen && (
           <button 
             onClick={() => setIsSidebarOpen(true)}
-            className="absolute top-6 left-6 z-50 p-2.5 bg-white border border-slate-200 rounded-xl shadow-md text-slate-600 hover:text-blue-600 hover:border-blue-200 transition-all group"
+            className="absolute top-6 left-6 z-50 p-2.5 bg-white border border-slate-200 rounded-xl shadow-lg shadow-slate-200/50 text-slate-600 hover:text-blue-600 hover:border-blue-200 transition-all"
             title="Open History"
           >
-            <PanelLeftOpen size={20} className="group-hover:scale-110 transition-transform" />
+            <Menu size={24} />
           </button>
         )}
 
         {!conversationStarted ? (
           
-          // =========================
-          // LOBBY (Clean & Simple)
-          // =========================
+          // LOBBY (Selection Screen)
           <div className="flex-1 overflow-y-auto custom-scrollbar">
             <div className="max-w-5xl mx-auto w-full px-6 py-12 md:px-12">
-              
               <div className="mb-10 text-center lg:text-left">
-                <h1 className="text-3xl font-extrabold text-slate-900 mb-2">
-                  Start Conversation
-                </h1>
-                <p className="text-slate-500 text-lg">
-                  Customize your learning session.
-                </p>
+                <h1 className="text-3xl font-extrabold text-slate-900 mb-2">Start Conversation</h1>
+                <p className="text-slate-500 text-lg">Customize your learning session.</p>
               </div>
-
-              {/* Controls Panel */}
               <div className="bg-white rounded-3xl p-8 shadow-sm border border-slate-200 mb-8 space-y-8">
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-10">
                   <div className="space-y-4">
-                    <label className="text-xs font-bold text-slate-400 uppercase tracking-wider ml-1">Mode</label>
+                    <label className="text-xs font-bold text-slate-400 uppercase tracking-wide ml-1">Mode</label>
                     <ModeSelector mode={mode} onModeChange={handleModeChange} />
                   </div>
                   <div className="space-y-4">
-                    <label className="text-xs font-bold text-slate-400 uppercase tracking-wider ml-1">Level</label>
+                    <label className="text-xs font-bold text-slate-400 uppercase tracking-wide ml-1">Level</label>
                     <LevelSelector level={level} onLevelChange={handleLevelChange} />
                   </div>
                 </div>
               </div>
-
-              {/* Selection Area */}
               <div className="space-y-6">
                 <div className="flex items-center justify-between">
-                  <h2 className="text-xl font-bold text-slate-800">
-                    {view === 'topics' ? "Select Topic" : "Select Scenario"}
-                  </h2>
-                  
+                  <h2 className="text-xl font-bold text-slate-800">{view === 'topics' ? "Select Topic" : "Select Scenario"}</h2>
                   {view === 'scenarios' && (
-                    <button
-                      onClick={handleBackToTopics}
-                      className="px-4 py-2 rounded-lg bg-slate-100 hover:bg-slate-200 text-slate-700 font-medium text-sm transition-colors flex items-center gap-2"
-                    >
+                    <button onClick={handleBackToTopics} className="px-4 py-2 rounded-lg bg-slate-100 hover:bg-slate-200 text-slate-700 font-medium text-sm transition-colors flex items-center gap-2">
                       <ArrowLeft size={16} /> Back
                     </button>
                   )}
                 </div>
-
                 {view === "topics" ? (
-                  <TopicSelector
-                    topic={selectedTopic}
-                    onTopicChange={handleTopicSelect}
-                    mode={mode}
-                  />
+                  <TopicSelector topic={selectedTopic} onTopicChange={handleTopicSelect} mode={mode} />
                 ) : (
-                  // Scenario List - Simple Cards
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                     {chatLoading ? (
                       <div className="col-span-full py-16 text-center text-slate-400">
@@ -459,26 +434,14 @@ const ConversationPage: FC = () => {
                         <p>Loading...</p>
                       </div>
                     ) : scenarios.length === 0 ? (
-                      <div className="col-span-full py-16 text-center text-slate-400 bg-slate-50 rounded-2xl border border-dashed border-slate-200">
-                        No scenarios found.
-                      </div>
+                      <div className="col-span-full py-16 text-center text-slate-400 bg-slate-50 rounded-2xl border border-dashed border-slate-200">No scenarios found.</div>
                     ) : (
                       scenarios.map((s) => (
-                        <button
-                          key={s.id}
-                          onClick={() => handleStart(s)}
-                          className="group text-left p-6 rounded-2xl bg-white border border-slate-200 hover:border-blue-500 hover:shadow-md transition-all duration-200"
-                        >
-                          <h3 className="font-bold text-lg text-slate-800 group-hover:text-blue-700 transition-colors mb-2">
-                            {s.title}
-                          </h3>
+                        <button key={s.id} onClick={() => handleStart(s)} className="group text-left p-6 rounded-2xl bg-white border border-slate-200 hover:border-blue-500 hover:shadow-md transition-all duration-200">
+                          <h3 className="font-bold text-lg text-slate-800 group-hover:text-blue-700 transition-colors mb-2">{s.title}</h3>
                           <div className="flex items-center gap-2">
-                            <span className="text-xs font-semibold bg-slate-100 text-slate-500 px-2 py-1 rounded">
-                              {level}
-                            </span>
-                            <span className="text-xs font-semibold bg-blue-50 text-blue-600 px-2 py-1 rounded uppercase">
-                              Scenario
-                            </span>
+                            <span className="text-xs font-semibold bg-slate-100 text-slate-500 px-2 py-1 rounded">{level}</span>
+                            <span className="text-xs font-semibold bg-blue-50 text-blue-600 px-2 py-1 rounded uppercase">Scenario</span>
                           </div>
                         </button>
                       ))
@@ -491,48 +454,25 @@ const ConversationPage: FC = () => {
         ) : (
           
           // =========================
-          // CHAT INTERFACE
+          // CHAT INTERFACE - COMPACT & SLIM FOOTER
           // =========================
           <div className="flex-1 flex flex-col h-full bg-[#FAFBFC] relative">
             
-            {/* Header */}
+            {/* Header: Fixed Height */}
             <header className="h-16 bg-white border-b border-slate-100 px-6 flex items-center justify-between z-20 flex-shrink-0">
               <div className="flex items-center gap-4">
-                {!isSidebarOpen && (
-                   <button 
-                    onClick={() => setIsSidebarOpen(true)}
-                    className="p-2 hover:bg-slate-100 rounded-lg text-slate-500 transition-colors"
-                  >
-                    <Menu size={20} />
-                  </button>
-                )}
-                
-                <div>
-                  <h4 className="font-bold text-lg text-slate-800 leading-none">
-                    {activeScenario?.title || selectedTopic || "Conversation"}
-                  </h4>
-                  <div className="flex items-center gap-2 mt-1">
-                    <span className="text-[10px] uppercase font-bold tracking-wider px-1.5 py-0.5 rounded bg-slate-100 text-slate-500">
-                      {mode}
-                    </span>
-                    <span className="text-[10px] uppercase font-bold tracking-wider px-1.5 py-0.5 rounded bg-slate-100 text-slate-500">
-                      {level}
-                    </span>
-                  </div>
+                {/* Ẩn nút Menu ở header nếu sidebar đang mở (để tránh lặp lại) */}
+                <div className={`transition-all duration-300 ${!isSidebarOpen ? 'ml-12' : ''}`}>
+                  <h4 className="font-bold text-lg text-slate-800 leading-none">{activeScenario?.title || selectedTopic || "Conversation"}</h4>
+                  <p className="text-xs text-slate-400 mt-1 uppercase font-semibold tracking-wide">{mode} • {level}</p>
                 </div>
               </div>
-              
-              <button 
-                onClick={resetConversation}
-                className="px-4 py-2 bg-slate-100 hover:bg-red-50 text-slate-600 hover:text-red-600 rounded-lg text-sm font-medium transition-colors"
-              >
-                Exit
-              </button>
+              <button onClick={resetConversation} className="px-4 py-2 bg-slate-100 hover:bg-red-50 text-slate-600 hover:text-red-600 rounded-lg text-sm font-medium transition-colors">Exit</button>
             </header>
 
-            {/* Chat Area */}
-            <div className="flex-1 overflow-y-auto px-4 py-6 scroll-smooth">
-              <div className="max-w-3xl mx-auto w-full h-full pb-32">
+            {/* Chat Area: Flex-1 and Overflow */}
+            <div className="flex-1 overflow-y-auto px-4 py-6 scroll-smooth custom-scrollbar">
+              <div className="max-w-3xl mx-auto w-full min-h-full">
                 <ChatArea
                   messages={messages}
                   loading={chatLoading}
@@ -541,58 +481,55 @@ const ConversationPage: FC = () => {
               </div>
             </div>
 
-            {/* Input Area */}
-            <div className="absolute bottom-0 left-0 right-0 z-30 bg-white border-t border-slate-200 pb-6 pt-4 px-4 shadow-[0_-4px_20px_rgba(0,0,0,0.02)]">
-              <div className="max-w-3xl mx-auto w-full">
-                
-                {/* Suggestions / Actions */}
-                {(isViewingHistory || pendingStep || isScenarioComplete || (mode === "scenario" && suggestions.length > 0) || (mode === "free" && !isScenarioComplete)) && (
-                  <div className="mb-4">
-                    {mode === "scenario" && !isScenarioComplete && !pendingStep && suggestions.length > 0 && !isViewingHistory && (
-                      <div className="mb-4 bg-slate-50 p-3 rounded-xl border border-slate-100">
-                        <p className="text-xs font-bold text-slate-400 uppercase tracking-wide mb-2 pl-1">Suggestion</p>
-                        <div className="space-y-2">
-                          {suggestions.map((sug, idx) => (
-                            <DialogueLine key={idx} text={sug} speaker="user" />
-                          ))}
+            {/* Input Area: Sticky Bottom (Flex-none) - Compact Design */}
+            {!isViewingHistory && (
+              <div className="flex-none bg-white border-t border-slate-200 z-30 py-3 px-4 shadow-[0_-4px_20px_rgba(0,0,0,0.02)]">
+                <div className="max-w-3xl mx-auto w-full">
+                  
+                  {/* Suggestions / Actions Bar - GỌN GÀNG HƠN */}
+                  {(pendingStep || isScenarioComplete || (mode === "scenario" && suggestions.length > 0) || (mode === "free" && !isScenarioComplete)) && (
+                    <div className="mb-2 animate-in slide-in-from-bottom-2 flex flex-col gap-2">
+                      
+                      {/* Compact Suggestions */}
+                      {mode === "scenario" && !isScenarioComplete && !pendingStep && suggestions.length > 0 && (
+                        <div className="bg-slate-50 p-2 rounded-xl border border-slate-100">
+                          <div className="space-y-1">
+                            {suggestions.map((sug, idx) => (
+                              <DialogueLine key={idx} text={sug} speaker="user" />
+                            ))}
+                          </div>
                         </div>
-                      </div>
-                    )}
-
-                    <div className="flex justify-center gap-3">
-                      {isViewingHistory ? (
-                        <button onClick={handlePracticeAgain} disabled={chatLoading} className="flex items-center gap-2 bg-blue-600 hover:bg-blue-700 text-white px-5 py-2.5 rounded-full font-bold shadow-md transition">
-                          <RefreshCw size={18} /> Practice Again
-                        </button>
-                      ) : (
-                        <>
-                          {pendingStep && (
-                            <button onClick={handleContinueScenario} className="flex items-center gap-2 bg-emerald-600 hover:bg-emerald-700 text-white px-6 py-2.5 rounded-full font-bold shadow-md transition">
-                              <PlayCircle size={18} /> Continue
-                            </button>
-                          )}
-                          {(isScenarioComplete || (mode === "free" && !isScenarioComplete)) && (
-                            <button onClick={handleGetFinalFeedback} disabled={chatLoading || isAnalyzing} className="flex items-center gap-2 bg-indigo-600 hover:bg-indigo-700 text-white px-6 py-2.5 rounded-full font-bold shadow-md transition disabled:opacity-50">
-                              {isAnalyzing ? <Loader2 size={18} className="animate-spin" /> : <Award size={18} />}
-                              {isAnalyzing ? "Analyzing..." : "Finish Session"}
-                            </button>
-                          )}
-                        </>
                       )}
-                    </div>
-                  </div>
-                )}
 
-                <ChatInput
-                  mode={mode}
-                  input={input}
-                  onInputChange={setInput}
-                  onSend={handleSend}
-                  loading={chatLoading || !!pendingStep}
-                  onVoiceMessage={handleVoiceMessage}
-                />
+                      {/* Small Actions */}
+                      <div className="flex justify-center gap-2">
+                        {pendingStep && (
+                          <button onClick={handleContinueScenario} className="flex items-center gap-2 bg-emerald-600 text-white px-4 py-1.5 rounded-full font-bold shadow-sm transition hover:bg-emerald-700 text-sm">
+                            <PlayCircle size={16} /> Continue
+                          </button>
+                        )}
+                        {(isScenarioComplete || (mode === "free" && !isScenarioComplete)) && (
+                          <button onClick={handleGetFinalFeedback} disabled={chatLoading || isAnalyzing} className="flex items-center gap-2 bg-indigo-600 text-white px-4 py-1.5 rounded-full font-bold shadow-sm transition disabled:opacity-50 hover:bg-indigo-700 text-sm">
+                            {isAnalyzing ? <Loader2 size={16} className="animate-spin" /> : <Award size={16} />}
+                            {isAnalyzing ? "Analyzing..." : "Finish"}
+                          </button>
+                        )}
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Input Component */}
+                  <ChatInput
+                    mode={mode}
+                    input={input}
+                    onInputChange={setInput}
+                    onSend={handleSend}
+                    loading={chatLoading || !!pendingStep}
+                    onVoiceMessage={handleVoiceMessage}
+                  />
+                </div>
               </div>
-            </div>
+            )}
           </div>
         )}
       </main>
@@ -600,4 +537,4 @@ const ConversationPage: FC = () => {
   );
 };
 
-export default ConversationPage;
+export default ConversationPage; 

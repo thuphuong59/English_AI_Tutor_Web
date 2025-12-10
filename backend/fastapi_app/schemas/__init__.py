@@ -49,7 +49,8 @@ from .decks import (
    ConversationSession,
    AnalyzeResponse,
    QuizFeedbackRequest,
-   SmartQuestion
+   SmartQuestion,
+   QuizResultCreate
 )
 from .grammar_check import (
     GrammarError,

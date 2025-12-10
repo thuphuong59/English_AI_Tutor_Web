@@ -3,7 +3,7 @@ import uuid
 from datetime import datetime
 from fastapi import HTTPException, status
 from fastapi_app import schemas
-from fastapi_app.database import admin_supabase
+from fastapi_app.database import admin_supabase, db_client
 from fastapi_app.services.vocabulary import calculate_srs, get_word_details_from_api
 
 # --- READ ---
@@ -287,7 +287,6 @@ def bulk_create_word_suggestions(suggestions_data: List[dict]):
 
 def get_words_from_user_deck(deck_id: int, user_id: str) -> List[dict]:
     try:
-        # Đảm bảo user_id format đúng nếu cần
         try:
             uuid.UUID(user_id)
         except ValueError:
@@ -299,3 +298,12 @@ def get_words_from_user_deck(deck_id: int, user_id: str) -> List[dict]:
     except Exception as e:
         print(f"--- LỖI THẬT TRONG get_words_from_user_deck ---: {e}")
         raise HTTPException(status_code=500, detail=str(e))
+    
+def insert_quiz_result(data: dict):
+    """
+    Thực hiện lệnh insert vào bảng UserQuizResults.
+    Chỉ trả về response từ Supabase, không xử lý logic.
+    """
+    response = db_client.table("UserQuizResults").insert(data).execute()
+    return response
+
