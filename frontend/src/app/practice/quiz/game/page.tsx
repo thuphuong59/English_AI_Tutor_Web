@@ -90,7 +90,7 @@ function QuizGamePage() {
 
 
   // Hàm xử lý logic chuyển câu
-  const handleNextQuestion = () => {
+  const handleNextQuestion = () => {  
     if (currentIndex + 1 < questions.length) {
       setCurrentIndex(currentIndex + 1);
     } else {

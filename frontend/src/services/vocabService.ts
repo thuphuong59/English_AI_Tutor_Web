@@ -207,7 +207,7 @@ export const saveQuizScore = async (deckId: number | null, score: number, total:
     return await sendData(`${QUIZ_API_URL}/save-result`, 'POST', {
       deck_id: deckId,
       score: score,
-      total_questions: total
+      total_questions: total 
     });
   } catch (error) {
     console.error('Lỗi khi lưu điểm:', error);

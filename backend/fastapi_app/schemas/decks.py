@@ -73,7 +73,7 @@ class PublicDeckDetail(BaseModel):
     class Config:
         from_attributes = True
     
-# --- AI ANALYSIS ---
+# --- AI ANALYSIS ---   
 
 class AnalyzeResponse(BaseModel):
     """Schema trả về cho API /analyze"""

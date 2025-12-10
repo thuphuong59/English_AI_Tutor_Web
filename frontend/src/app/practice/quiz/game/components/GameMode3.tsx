@@ -76,4 +76,4 @@ export default function GameMode3_TypeD2V({ question, onSubmit }: Props) {
       </form>
     </div>
   );
-}
+} 

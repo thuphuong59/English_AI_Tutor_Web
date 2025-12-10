@@ -132,4 +132,4 @@ export default function QuizResult({ score, total, missedWords, onRestart }: Pro
       )}
     </div>
   );
-}
+} 

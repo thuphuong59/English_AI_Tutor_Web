@@ -13,4 +13,4 @@ export function useCountdown(initialSeconds: number) {
   const seconds = timeLeft % 60;
 
   return { timeLeft, minutes, seconds, setTimeLeft };
-}
+} 

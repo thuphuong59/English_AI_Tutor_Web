@@ -20,7 +20,7 @@ export default function QuizHeader({ current, total }: Props) {
                      transition-all duration-300 ease-out" 
           style={{ width: `${progressPercentage}%` }}>
         </div>
-      </div>
+      </div> 
     </div>
   );
 }

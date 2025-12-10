@@ -1,4 +1,5 @@
 from fastapi import APIRouter, Depends, File, UploadFile, Form
+from fastapi_app.schemas.user import UpdateUserRequest
 from fastapi_app.dependencies import get_current_user
 from fastapi_app.schemas import ChangePasswordRequest
 from fastapi_app.services.user import (
@@ -18,11 +19,10 @@ async def upload_avatar(file: UploadFile = File(...), current_user=Depends(get_c
 
 @router.put("/update-profile")
 async def update_profile(
-    username: str = Form(...),
-    avatar_url: str = Form(...),
+    request: UpdateUserRequest,
     current_user=Depends(get_current_user)
 ):
-    return await update_profile_service(username, avatar_url, current_user)
+    return await update_profile_service(request, current_user)
 
 
 @router.put("/change-password")

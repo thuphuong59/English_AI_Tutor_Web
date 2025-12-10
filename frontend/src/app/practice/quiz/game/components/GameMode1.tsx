@@ -52,4 +52,4 @@ export default function GameMode1_McV2D({ question, onSubmit }: Props) {
       </div>
     </div>
   );
-}
+} 

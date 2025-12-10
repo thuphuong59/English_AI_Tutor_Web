@@ -41,7 +41,7 @@ def get_smart_quiz_data(
 @router.post(
     "/quiz/feedback", 
     tags=["Quiz Game"],
-    status_code=status.HTTP_201_CREATED
+    status_code=status.HTTP_201_CREATED 
 )
 def submit_quiz_feedback(
     feedback_data: schemas.QuizFeedbackRequest,
