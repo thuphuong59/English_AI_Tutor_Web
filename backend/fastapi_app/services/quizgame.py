@@ -3,6 +3,7 @@ from typing import Any, Dict, List
 import random
 import re
 
+from fastapi_app.schemas.decks import QuizResultCreate
 from fastapi_app.crud import decks as decks_crud 
 from fastapi_app.crud import vocabulary as vocab_crud
 
@@ -225,3 +226,33 @@ def process_quiz_feedback(user_id: str, missed_words: List[str]) -> dict:
         if isinstance(e, HTTPException): raise e
         print(f"--- LỖI THẬT TRONG process_quiz_feedback ---: {e}") 
         raise HTTPException(status_code=500, detail=f"Error processing feedback: {str(e)}")
+
+def process_save_quiz_result(result_data: QuizResultCreate, user_id: str):
+    """
+    Xử lý logic tính toán điểm và gọi CRUD để lưu.
+    """
+    try:
+        # Tính phần trăm điểm
+        percentage = 0.0
+        if result_data.total_questions > 0:
+            percentage = (result_data.score / result_data.total_questions) * 100
+
+        #  (Data Preparation)
+        data_to_insert = {
+            "user_id": user_id,
+            "deck_id": result_data.deck_id,
+            "score": result_data.score,
+            "total_questions": result_data.total_questions,
+            "percentage": round(percentage, 2)
+        }
+        response = vocab_crud.insert_quiz_result(data_to_insert)
+
+        if not response.data:
+            raise HTTPException(status_code=500, detail="Lỗi: Không thể lưu kết quả vào database (No data returned).")
+
+        return True
+
+    except Exception as e:
+        print(f"Service Error [process_save_quiz_result]: {e}")
+        raise e
+   

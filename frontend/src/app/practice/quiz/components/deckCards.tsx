@@ -52,4 +52,4 @@ export default function DeckCard({ deck, deckType }: Props) {
       </div>
     </Link>
   );
-}
+} 

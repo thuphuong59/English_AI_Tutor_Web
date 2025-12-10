@@ -59,7 +59,7 @@ def update_deck_details(
 # DELETE
 @router.delete("/{deck_id}", response_model=schemas.SuccessResponse)
 def delete_user_deck(
-    deck_id: int, 
+    deck_id: int,   
     user_id: str = Depends(get_current_user_id)
 ):
     """Xóa một bộ từ."""

@@ -56,4 +56,4 @@ export default function GameMode2_McC2V({ question, onSubmit }: Props) {
       </div>
     </div>
   );
-}
+} 

@@ -49,7 +49,11 @@ from .decks import (
    ConversationSession,
    AnalyzeResponse,
    QuizFeedbackRequest,
-   SmartQuestion
+   SmartQuestion,
+   QuizResultCreate,
+   TopicRequest,
+   DeckResponse
+   
 )
 from .grammar_check import (
     GrammarError,

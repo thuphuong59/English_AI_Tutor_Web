@@ -62,4 +62,4 @@ export default function DeckSelector({ userDecks, publicDecks }: Props) {
       {activeTab === "user" && renderDecks(userDecks, "user")}
     </div>
   );
-}
+} 

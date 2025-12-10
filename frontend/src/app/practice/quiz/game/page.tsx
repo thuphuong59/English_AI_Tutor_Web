@@ -1,9 +1,9 @@
 "use client";
 
-import React, { useState, useEffect, Suspense } from "react";
+import React, { useState, useEffect, Suspense, useRef } from "react";
 import { useSearchParams } from "next/navigation";
 import { SmartQuestion } from "@/app/practice/types";
-import { fetchSmartQuiz } from "@/services/vocabService"; 
+import { fetchSmartQuiz, saveQuizScore } from "@/services/vocabService"; 
 
 import GameMode1_McV2D from "./components/GameMode1";
 import GameMode2_McC2V from "./components/GameMode2";
@@ -34,6 +34,9 @@ function QuizGamePage() {
   const [score, setScore] = useState(0);
   const [missedWords, setMissedWords] = useState<string[]>([]);
   const [showResult, setShowResult] = useState(false);
+
+  // Ref để đảm bảo chỉ lưu điểm 1 lần khi kết thúc
+  const scoreSaved = useRef(false);
 
   useEffect(() => {
     if (!deckType || !deckIdString) {
@@ -68,9 +71,26 @@ function QuizGamePage() {
     fetchGameData();
   }, [deckType, deckIdString]);
 
+  // Effect để lưu điểm khi showResult = true
+  useEffect(() => {
+    if (showResult && !scoreSaved.current) {
+        scoreSaved.current = true;
+        const deckId = deckIdString ? parseInt(deckIdString, 10) : null;
+        const totalQuestions = questions.length;
+
+        // Chỉ lưu nếu có điểm và số câu > 0 (tránh lưu rác)
+        if (totalQuestions > 0) {
+            console.log("Saving score...", { deckId, score, totalQuestions });
+            saveQuizScore(deckId, score, totalQuestions)
+                .then(() => console.log("Score saved successfully"))
+                .catch((err) => console.error("Failed to save score:", err));
+        }
+    }
+  }, [showResult, deckIdString, score, questions.length]);
+
 
   // Hàm xử lý logic chuyển câu
-  const handleNextQuestion = () => {
+  const handleNextQuestion = () => {  
     if (currentIndex + 1 < questions.length) {
       setCurrentIndex(currentIndex + 1);
     } else {
@@ -100,6 +120,7 @@ function QuizGamePage() {
     setScore(0);
     setMissedWords([]);
     setShowResult(false);
+    scoreSaved.current = false; // Reset trạng thái lưu điểm
   };
 
   if (loading) {

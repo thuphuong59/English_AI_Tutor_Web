@@ -4,6 +4,7 @@ import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import toast from "react-hot-toast";
 import { useUser } from "./UserContext";
+import { Loader2 } from "lucide-react";
 
 const API_BASE_URL = "http://127.0.0.1:8000";
 
@@ -12,37 +13,43 @@ export default function SettingPage() {
   const { user, refreshUser } = useUser();
 
   const [username, setUsername] = useState("");
-  const [avatarUrl, setAvatarUrl] = useState("");
+  const [avatarUrl, setAvatarUrl] = useState<string | null>(null);
   const [avatarFile, setAvatarFile] = useState<File | null>(null);
+
   const [oldPassword, setOldPassword] = useState("");
   const [newPassword, setNewPassword] = useState("");
-  const [loading, setLoading] = useState(false);
 
-  // Load dữ liệu user hiện tại
+  const [isSavingProfile, setIsSavingProfile] = useState(false);
+  const [isChangingPassword, setIsChangingPassword] = useState(false);
+
+
+
   useEffect(() => {
     if (user) {
       setUsername(user.username || user.user_metadata?.username || "");
-      setAvatarUrl(user.avatar_url || user.user_metadata?.avatar_url || "");
+      setAvatarUrl(user.avatar_url || user.user_metadata?.avatar_url || null);
     }
   }, [user]);
 
-  // Upload avatar tạm thời trước khi nhấn Save
+
+
   const handleAvatarChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    if (e.target.files && e.target.files[0]) {
+    if (e.target.files?.[0]) {
       const file = e.target.files[0];
       setAvatarFile(file);
       setAvatarUrl(URL.createObjectURL(file));
     }
   };
 
-  // Lưu thay đổi
+
   const handleSaveChanges = async () => {
-    setLoading(true);
+    setIsSavingProfile(true);
+
     try {
-      let newAvatarUrl = avatarUrl;
+      let updatedAvatarUrl = avatarUrl;
+      const token = localStorage.getItem("access_token");
 
       if (avatarFile) {
-        const token = localStorage.getItem("access_token");
         const formData = new FormData();
         formData.append("file", avatarFile);
 
@@ -53,143 +60,153 @@ export default function SettingPage() {
         });
 
         const data = await res.json();
-        if (!res.ok) throw new Error(data.detail || "Avatar upload failed");
-        newAvatarUrl = data.avatar_url;
+        if (!res.ok) throw new Error(data.detail || "Upload failed");
+
+        updatedAvatarUrl = data.avatar_url;
       }
 
-      const token = localStorage.getItem("access_token");
+      const body: any = {};
+      if (username) body.username = username;
+      if (updatedAvatarUrl) body.avatar_url = updatedAvatarUrl;
+
       const res = await fetch(`${API_BASE_URL}/user/update-profile`, {
         method: "PUT",
         headers: {
           Authorization: `Bearer ${token}`,
-          "Content-Type": "application/x-www-form-urlencoded",
+          "Content-Type": "application/json",
         },
-        body: new URLSearchParams({ username, avatar_url: newAvatarUrl }),
+        body: JSON.stringify(body),
       });
 
       const data = await res.json();
-      if (!res.ok) throw new Error(data.detail || "Profile update failed");
+      if (!res.ok) throw new Error(data.detail || "Update failed");
 
-      toast.success("Profile updated successfully!");
+      toast.success("Profile updated!");
       await refreshUser();
 
-      setTimeout(() => router.push("/profile"), 1200);
+      router.push("/profile");   // <== chuyển trang
+
     } catch (err: any) {
-      toast.error(err.message || "Failed to update profile.");
+      toast.error(err.message);
     } finally {
-      setLoading(false);
+      setIsSavingProfile(false);
     }
   };
 
+
+
   const handleChangePassword = async () => {
-    if (!oldPassword || !newPassword) {
-      return toast.error("Please fill both password fields!");
-    }
+    if (!oldPassword || !newPassword)
+      return toast.error("Fill both fields");
+
+    setIsChangingPassword(true);
 
     try {
       const token = localStorage.getItem("access_token");
+
       const res = await fetch(`${API_BASE_URL}/user/change-password`, {
         method: "PUT",
         headers: {
           Authorization: `Bearer ${token}`,
           "Content-Type": "application/json",
         },
-        body: JSON.stringify({ old_password: oldPassword, new_password: newPassword }),
+        body: JSON.stringify({
+          old_password: oldPassword,
+          new_password: newPassword,
+        }),
       });
 
       const data = await res.json();
-      if (!res.ok) throw new Error(data.detail || "Password update failed");
+      if (!res.ok) throw new Error(data.detail);
 
-      toast.success("Password changed successfully!");
+      toast.success("Password changed!");
       setOldPassword("");
       setNewPassword("");
+
     } catch (err: any) {
       toast.error(err.message);
+    } finally {
+      setIsChangingPassword(false);
     }
   };
 
+
+
   return (
-    <div className="min-h-screen bg-gradient-to-br from-blue-50 via-white to-blue-50 flex items-center justify-center p-4">
-      <div className="w-full max-w-2xl bg-white rounded-2xl shadow-xl p-8">
-        <h2 className="text-3xl font-bold text-[#0067C5] text-center mb-6">
+    <div className="min-h-screen flex items-center justify-center px-3 bg-gradient-to-br from-gray-100 via-white to-gray-100">
+
+      <div className="bg-white rounded-2xl shadow-xl px-8 py-10 max-w-xl w-full">
+        
+        <h2 className="text-3xl font-bold text-center mb-8 text-blue-600">
           User Settings
         </h2>
 
+
         {/* Avatar */}
-        <div className="flex flex-col items-center mb-6">
+        <div className="flex justify-center mb-8">
           <div className="relative">
-            <img
-              src={avatarUrl || "/default-avatar.png"}
-              alt="Avatar"
-              className="w-32 h-32 rounded-full object-cover border-4 border-[#0067C5]"
-            />
-            <label className="absolute bottom-0 right-0 bg-[#0067C5] p-2 rounded-full cursor-pointer hover:bg-blue-700 text-white">
-              <input
-                type="file"
-                accept="image/*"
-                className="hidden"
-                onChange={handleAvatarChange}
+
+            {avatarUrl && (
+              <img
+                src={avatarUrl ?? undefined}
+                alt="avatar"
+                className="w-36 h-36 rounded-full object-cover shadow border-4 border-blue-400"
               />
+            )}
+
+            <label className="absolute bottom-0 right-0 bg-blue-600 hover:bg-blue-700 text-white rounded-full p-2 cursor-pointer shadow-md">
+              <input type="file" accept="image/*" className="hidden" onChange={handleAvatarChange} />
               ✏️
             </label>
           </div>
         </div>
 
-        {/* Username */}
+
+
         <div className="mb-6">
-          <label className="block font-semibold mb-1 text-gray-700">
-            Username
-          </label>
+          <label className="block font-semibold mb-1 text-gray-600">Username</label>
+
           <input
-            type="text"
             value={username}
             onChange={(e) => setUsername(e.target.value)}
-            placeholder="Enter your username"
-            className="w-full border rounded-lg px-4 py-2 focus:outline-none focus:ring-2 focus:ring-[#0067C5]"
+            className="w-full border rounded-lg px-4 py-2 focus:ring-2 focus:ring-blue-500"
+            placeholder="Enter username"
           />
         </div>
 
-        {/* Change Password */}
-        <div className="mb-6 border-t pt-6">
-          <h3 className="font-semibold text-lg mb-3 text-gray-700">
-            Change Password
-          </h3>
-          <input
-            type="password"
-            value={oldPassword}
-            onChange={(e) => setOldPassword(e.target.value)}
-            placeholder="Old password"
-            className="w-full border rounded-lg px-4 py-2 mb-3 focus:outline-none focus:ring-2 focus:ring-[#0067C5]"
+
+
+        <div className="pt-6 border-t">
+          <h3 className="font-semibold text-lg text-gray-700 mb-4">Change Password</h3>
+
+          <input type="password" placeholder="Old password"
+            value={oldPassword} onChange={(e)=>setOldPassword(e.target.value)}
+            className="w-full border rounded-lg px-4 py-2 mb-3 focus:ring-2 focus:ring-blue-500"
           />
-          <input
-            type="password"
-            value={newPassword}
-            onChange={(e) => setNewPassword(e.target.value)}
-            placeholder="New password"
-            className="w-full border rounded-lg px-4 py-2 focus:outline-none focus:ring-2 focus:ring-[#0067C5]"
+
+          <input type="password" placeholder="New password"
+            value={newPassword} onChange={(e)=>setNewPassword(e.target.value)}
+            className="w-full border rounded-lg px-4 py-2 mb-4 focus:ring-2 focus:ring-blue-500"
           />
+
           <button
+            disabled={isChangingPassword}
             onClick={handleChangePassword}
-            className="mt-3 w-full bg-[#0067C5] text-white px-4 py-2 rounded-md hover:bg-blue-700 transition"
+            className="w-full bg-blue-600 hover:bg-blue-700 text-white font-medium rounded-lg py-2 transition"
           >
-            Change Password
+            {isChangingPassword ? "Changing…" : "Change Password"}
           </button>
         </div>
 
-        {/* Save Changes */}
-        <div className="text-center">
-          <button
-            onClick={handleSaveChanges}
-            disabled={loading}
-            className={`w-full px-6 py-2 font-semibold rounded-lg text-white ${
-              loading
-                ? "bg-gray-400 cursor-not-allowed"
-                : "bg-[#0067C5] hover:bg-blue-700 transition"
-            }`}
-          >
-            {loading ? "Saving..." : "Save Changes"}
-          </button>
-        </div>
+
+
+        <button
+          disabled={isSavingProfile}
+          onClick={handleSaveChanges}
+          className="mt-6 w-full py-3 font-semibold rounded-xl shadow bg-green-600 hover:bg-green-700 text-white"
+        >
+          {isSavingProfile ? <Loader2 className="animate-spin inline"/> : "Save Changes"}
+        </button>
       </div>
     </div>
   );

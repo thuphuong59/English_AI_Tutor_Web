@@ -27,21 +27,42 @@ async def upload_avatar_service(file: UploadFile, current_user):
         raise HTTPException(status_code=400, detail=str(e))
 
 
-async def update_profile_service(username: str, avatar_url: str, current_user):
+async def update_profile_service(request, current_user):
     try:
+        # Lấy thông tin user hiện tại từ supabase
+        profile_res = admin_supabase.table("profiles")\
+            .select("username, avatar_url")\
+            .eq("id", current_user.id)\
+            .single()\
+            .execute()
+
+        old_profile = profile_res.data or {}
+
+        # NEW - Chỉ update cái nào truyền lên
+        new_username = request.username if request.username is not None else old_profile.get("username")
+        new_avatar = request.avatar_url if request.avatar_url is not None else old_profile.get("avatar_url")
+
+        # Update user metadata
         admin_supabase.auth.admin.update_user_by_id(
             current_user.id,
-            {"user_metadata": {"username": username, "avatar_url": avatar_url}}
+            {"user_metadata": {
+                "username": new_username,
+                "avatar_url": new_avatar
+            }}
         )
 
         admin_supabase.table("profiles").upsert({
             "id": current_user.id,
-            "username": username,
-            "avatar_url": avatar_url,
+            "username": new_username,
+            "avatar_url": new_avatar,
             "updated_at": datetime.datetime.utcnow().isoformat()
         }).execute()
 
-        return {"message": "Profile updated successfully", "username": username, "avatar_url": avatar_url}
+        return {
+            "message": "Profile updated",
+            "username": new_username,
+            "avatar_url": new_avatar
+        }
 
     except Exception as e:
         raise HTTPException(status_code=400, detail=str(e))

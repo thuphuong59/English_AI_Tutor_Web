@@ -23,7 +23,7 @@ export default function OptionButton({ text, onClick, isAnswered, isCorrect, isS
       // Màu xám mờ nếu là đáp án sai 
       return "bg-gray-50 border-gray-200 text-gray-400 opacity-70";
     }
-    
+     
     //  Trạng thái chờ (chưa trả lời)
     return "bg-white border-gray-200 text-gray-700 hover:bg-gray-50 hover:border-gray-400";
   };

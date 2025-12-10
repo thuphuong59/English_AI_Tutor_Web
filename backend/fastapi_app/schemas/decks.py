@@ -1,6 +1,6 @@
 from pydantic import BaseModel, Field
 from typing import List, Literal, Optional
-from datetime import date
+from datetime import date, datetime
 from fastapi_app.schemas.vocabulary import VocabularyStats, WordInDB
 
 # --- Deck Schemas ---
@@ -73,7 +73,7 @@ class PublicDeckDetail(BaseModel):
     class Config:
         from_attributes = True
     
-# --- AI ANALYSIS ---
+# --- AI ANALYSIS ---   
 
 class AnalyzeResponse(BaseModel):
     """Schema trả về cho API /analyze"""
@@ -102,6 +102,11 @@ class SmartQuestion(BaseModel):
 
 class QuizFeedbackRequest(BaseModel):
     missed_words: List[str] # Frontend chỉ cần gửi list các từ sai
+
+class QuizResultCreate(BaseModel):
+    deck_id: int | None = None
+    score: int
+    total_questions: int
 class TopicRequest(BaseModel):
     """Schema dùng cho input khi người dùng click START topic"""
     topic_name: str
@@ -111,3 +116,4 @@ class DeckResponse(BaseModel):
     """Schema đơn giản trả về cho Frontend biết trạng thái của Deck"""
     id: int 
     status: str # Ví dụ: "exists" hoặc "generating"
+

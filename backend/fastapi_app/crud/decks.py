@@ -89,7 +89,7 @@ def delete_deck(deck_id: int, user_id: str):
         return {"success": True}
     except Exception as e:
         print(f"--- LỖI THẬT TRONG delete_deck ---: {e}") 
-        raise HTTPException(status_code=500, detail=str(e))
+        raise HTTPException(status_code=500, detail=str(e)) 
     
 def get_all_public_decks():
     """Lấy TẤT CẢ các bộ từ công cộng (ví dụ: Oxford 3000, Giao tiếp)"""

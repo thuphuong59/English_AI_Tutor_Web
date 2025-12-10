@@ -5,6 +5,8 @@ psycopg2-binary
 pydantic
 openai
 python-dotenv
-google-generativeai
+google-genai
 supabase
 pyjwt
+gtts
+faster-whisper

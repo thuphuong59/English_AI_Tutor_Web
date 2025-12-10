@@ -39,17 +39,14 @@ export async function loginUser(email: string, password: string) {
   const data = await handleResponse(res);
 
   // LƯU TRỮ CHÍNH XÁC ID NGƯỜI DÙNG VÀO LOCALSTORAGE
-  if (data.user?.id || data.id) {
-    // Backend thường trả về {access_token, token_type, user: {id, email...}}
-    const userId = data.user?.id || data.id; 
-    localStorage.setItem("authenticatedUserId", userId);
-  } else if (data.access_token) {
-     // Nếu backend KHÔNG trả về ID trong lần đăng nhập, ta sẽ sử dụng token để lấy ID sau
-     // Nhưng để fix lỗi ngay, chúng ta giả định ID có thể có trong data.id
-     // Giữ logic cũ nếu không tìm thấy ID
-  }
+  // Backend FastAPI (Supabase) thường trả về: {access_token, token_type, user: {id, ...}}
+  const userId = data.user?.id || data.id || data.user_id; 
   
-  // Lưu token & thời gian hết hạn
+  if (userId) {
+    localStorage.setItem("authenticatedUserId", userId);
+  }
+  
+  // Lưu token & thời gian hết hạn
   localStorage.setItem("access_token", data.access_token);
   localStorage.setItem("token_type", data.token_type || "bearer");
   document.cookie = `access_token=${data.access_token}; path=/; max-age=3600; SameSite=Lax`;
@@ -74,6 +71,7 @@ export const getCurrentUser = async () => {
 
     // Cập nhật ID người dùng sau khi lấy profile (HÀNH ĐỘNG KHÔI PHỤC)
     if (data.id) {
+      // Đảm bảo ID user luôn được lưu khi profile được tải thành công
       localStorage.setItem("authenticatedUserId", data.id);
     }
 

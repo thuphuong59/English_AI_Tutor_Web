@@ -84,4 +84,4 @@ export default function QuizLobbyPage() {
       </div>
     </main>
   );
-}
+}  

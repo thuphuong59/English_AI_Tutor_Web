@@ -1,74 +1,69 @@
-
 import { mutate } from 'swr';
 import { authHeaders, API_BASE_URL } from './authService';
-const VOCAB_API_URL = `${API_BASE_URL}/vocabulary`;  
+
+const VOCAB_API_URL = `${API_BASE_URL}/vocabulary`;
 const DECK_API_URL = `${API_BASE_URL}/decks`;
 const ANALYSIS_API_URL = `${API_BASE_URL}/analysis`;
 const PUBLIC_DECK_API_URL = `${API_BASE_URL}/public-decks`;
 const QUIZ_DATA_API_URL = `${API_BASE_URL}/quiz-data`;
-const QUIZ_API_URL = `${API_BASE_URL}/quiz`; 
+const QUIZ_API_URL = `${API_BASE_URL}/quiz`;
 
-
-const sendData = async (url: string, method: 'POST' | 'PATCH', body: object) => {
+// Helper: Gửi request với method POST, PATCH, DELETE...
+const sendData = async (url: string, method: 'POST' | 'PATCH' | 'PUT' | 'DELETE', body?: object) => {
   const res = await fetch(url, {
     method: method,
     headers: authHeaders(),
-    body: JSON.stringify(body),
+    body: body ? JSON.stringify(body) : undefined,
   });
 
   if (!res.ok) {
-    const errorData = await res.json();
-    throw new Error(errorData.detail || 'Lỗi khi gửi dữ liệu');
+    const errorData = await res.json().catch(() => ({}));
+    throw new Error(errorData.detail || `Lỗi khi gửi dữ liệu (${res.status})`);
   }
   return res.json();
 };
 
-// request Get
+// Helper: Gửi request GET
 const getData = async (url: string) => {
   const res = await fetch(url, {
     method: 'GET',
-    headers: authHeaders(),
+    headers: authHeaders(), 
   });
 
   if (!res.ok) {
-    const errorData = await res.json();
-    throw new Error(errorData.detail || 'Lỗi khi tải dữ liệu');
+    const errorData = await res.json().catch(() => ({}));
+    throw new Error(errorData.detail || `Lỗi khi tải dữ liệu (${res.status})`);
   }
   return res.json();
 };
-// Gửi kết quả của một phiên ôn tập
+
+
 export const postReviewResult = async (wordId: number, quality: number) => {
   try {
-    const response = await sendData(`${VOCAB_API_URL}/review`, 'POST', {
+    return await sendData(`${VOCAB_API_URL}/review`, 'POST', {
       word_id: wordId,
       quality: quality,
     });
-    return response;
   } catch (error) {
     console.error('Lỗi khi gửi kết quả review:', error);
     throw error;
   }
 };
 
-// Thêm một từ mới (tự nhập)
 export const addNewWordManually = async (
-  wordData: { word: string; type: string, definition: string; example: string },
-  deckId: number 
+  wordData: { word: string; type: string; definition: string; example: string },
+  deckId: number
 ) => {
-    try {
-        //  Gọi API mới 
-        const response = await sendData(`${VOCAB_API_URL}/deck/${deckId}/new-word`, 'POST', wordData);
-      
-        mutate(`/decks/${deckId}`);
-        
-        return response;
-    } catch (error) {
-        console.error('Lỗi khi thêm từ mới:', error);
-        throw error;
-    }
-}
+  try {
+    const response = await sendData(`${VOCAB_API_URL}/deck/${deckId}/new-word`, 'POST', wordData);
+    mutate(`/decks/${deckId}`);
+    return response;
+  } catch (error) {
+    console.error('Lỗi khi thêm từ mới:', error);
+    throw error;
+  }
+};
 
-// Cập nhật từ
 export const updateWord = async (wordId: number, wordData: { word?: string; type?: string; definition?: string; example?: string }) => {
   try {
     const response = await sendData(`${VOCAB_API_URL}/${wordId}`, 'PATCH', wordData);
@@ -80,21 +75,17 @@ export const updateWord = async (wordId: number, wordData: { word?: string; type
   }
 };
 
-// Xóa từ
 export const deleteWord = async (wordId: number) => {
-  const res = await fetch(`${VOCAB_API_URL}/${wordId}`, {
-    method: 'DELETE',
-    headers: authHeaders(),
-  });
-
-  if (!res.ok) {
-    const errorData = await res.json();
-    throw new Error(errorData.detail || 'Lỗi khi xóa từ');
+  try {
+    const response = await sendData(`${VOCAB_API_URL}/${wordId}`, 'DELETE');
+    mutate('/vocabulary/dashboard');
+    return response;
+  } catch (error) {
+    console.error('Lỗi khi xóa từ:', error);
+    throw error;
   }
-  
-  mutate('/vocabulary/dashboard'); 
-  return res.json();
 };
+
 
 export const createDeck = async (name: string, description: string | null) => {
   try {
@@ -102,9 +93,7 @@ export const createDeck = async (name: string, description: string | null) => {
       name: name,
       description: description,
     });
-    
-    mutate('/decks/'); // ( API router là /api/decks, SWR key là /decks/)
-    
+    mutate('/decks'); 
     return response;
   } catch (error) {
     console.error('Lỗi khi tạo bộ từ:', error);
@@ -115,8 +104,7 @@ export const createDeck = async (name: string, description: string | null) => {
 export const updateDeck = async (deckId: number, data: { name?: string; description?: string }) => {
   try {
     const response = await sendData(`${DECK_API_URL}/${deckId}`, 'PATCH', data);
-    // Tải lại (mutate) danh sách các bộ từ
-    mutate('/decks'); 
+    mutate('/decks');
     return response;
   } catch (error) {
     console.error('Lỗi khi cập nhật bộ từ:', error);
@@ -126,33 +114,25 @@ export const updateDeck = async (deckId: number, data: { name?: string; descript
 
 export const deleteDeck = async (deckId: number) => {
   try {
-    const res = await fetch(`${DECK_API_URL}/${deckId}`, {
-      method: 'DELETE',
-      headers: authHeaders(),
-    });
-    if (!res.ok) {
-      const errorData = await res.json();
-      throw new Error(errorData.detail || 'Lỗi khi xóa bộ từ');
-    }
-
+    const response = await sendData(`${DECK_API_URL}/${deckId}`, 'DELETE');
     mutate('/decks');
-    return res.json();
+    return response;
   } catch (error) {
     console.error('Lỗi khi xóa bộ từ:', error);
     throw error;
   }
 };
 
-//AI suggestion 
-export const addSuggestedWord = async (suggestionId: number, deckId: number) => { 
+
+export const addSuggestedWord = async (suggestionId: number, deckId: number) => {
   try {
     const response = await sendData(`${VOCAB_API_URL}/suggestions/add`, 'POST', {
       suggestion_id: suggestionId,
       deck_id: deckId,
     });
     
-    mutate('/decks'); // Tải lại stats của Decks
-    mutate('/vocabulary/suggestions'); // Xóa từ này khỏi danh sách gợi ý
+    mutate('/decks');
+    mutate('/vocabulary/suggestions');
     
     return response;
   } catch (error) {
@@ -167,7 +147,6 @@ export const analyzeConversationSession = async (sessionId: string) => {
       session_id: sessionId,
     });
     
-    // Nếu có từ mới, tải lại tab "AI Suggestions"
     if (response.words_added > 0) {
       mutate('/vocabulary/suggestions');
     }
@@ -179,13 +158,12 @@ export const analyzeConversationSession = async (sessionId: string) => {
 };
 
 
-// Ý TƯỞNG 1: Fetch dữ liệu cho Trang Lobby (Chọn Deck)
 
 export const fetchQuizLobbyData = async () => {
   try {
     const [userDecksRes, publicDecksRes] = await Promise.all([
-      getData(`${DECK_API_URL}/`), 
-      getData(PUBLIC_DECK_API_URL) 
+      getData(`${DECK_API_URL}/`),
+      getData(PUBLIC_DECK_API_URL)
     ]);
     
     return {
@@ -199,22 +177,16 @@ export const fetchQuizLobbyData = async () => {
   }
 };
 
-
-// Ý TƯỞNG 2: Fetch bộ câu hỏi "Smart Quiz"
-
 export const fetchSmartQuiz = async (deckType: string, deckId: number) => {
   try {
     const url = `${QUIZ_DATA_API_URL}/${deckType}-deck/${deckId}`;
-    const quizData = await getData(url);
-    return quizData;
+    return await getData(url);
   } catch (error) {
     console.error('Lỗi khi tải Smart Quiz:', error);
     throw error;
   }
 };
 
-
-// Ý TƯỞNG 3: Gửi kết quả (các từ sai) sau khi chơi
 export const postQuizFeedback = async (missedWords: string[]) => {
   try {
     const response = await sendData(`${QUIZ_API_URL}/feedback`, 'POST', {
@@ -222,10 +194,23 @@ export const postQuizFeedback = async (missedWords: string[]) => {
     });
     
     mutate('/vocabulary/suggestions');
-    
     return response;
   } catch (error) {
     console.error('Lỗi khi gửi Quiz Feedback:', error);
+    throw error;
+  }
+};
+
+
+export const saveQuizScore = async (deckId: number | null, score: number, total: number) => {
+  try {
+    return await sendData(`${QUIZ_API_URL}/save-result`, 'POST', {
+      deck_id: deckId,
+      score: score,
+      total_questions: total 
+    });
+  } catch (error) {
+    console.error('Lỗi khi lưu điểm:', error);
     throw error;
   }
 };

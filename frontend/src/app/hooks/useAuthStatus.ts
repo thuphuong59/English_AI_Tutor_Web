@@ -19,5 +19,5 @@ export const useAuthStatus = () => {
     }
   }, []);
 
-  return { userId, isLoading };
+  return { userId, isLoading };  
 };
