@@ -6,12 +6,12 @@ import asyncio
 from datetime import datetime, timedelta, date
 from typing import Any, Dict, List, Set, Optional
 from urllib.parse import quote_plus
-
 from fastapi_app import schemas
 from fastapi_app.database import db_client, admin_supabase
 from fastapi_app.crud import vocabulary as vocab_crud
-import google.generativeai as genai
+import google.generativeai  as genai
 from fastapi_app.prompts import vocabulary as prompts
+from fastapi_app.services import vocabulary
 
 
 try:
@@ -211,3 +211,74 @@ async def analyze_and_enrich_transcript(transcript_json: List[Dict[str, Any]], u
 
     print(f"Enriched {len(final_results)} words.")
     return final_results
+
+async def check_existing_deck(user_id: str, topic_name: str):
+    """Kiểm tra Deck đã tồn tại trên Supabase chưa."""
+    response = admin_supabase.table("Decks") \
+        .select("*") \
+        .eq("user_id", user_id) \
+        .eq("name", topic_name) \
+        .execute()
+    return response.data[0] if response.data else None
+
+async def create_new_deck(user_id: str, topic_name: str):
+    """Tạo bộ từ mới rỗng."""
+    insert_res = admin_supabase.table("Decks").insert({
+        "user_id": user_id,
+        "name": topic_name,
+        "description": f"AI generated for {topic_name}"
+    }).execute()
+    return insert_res.data[0]
+async def get_user_level(user_id: str) -> str:
+    """Truy vấn Supabase để lấy Level của người dùng từ bảng roadmaps."""
+    try:
+        # GIẢ ĐỊNH: Bảng 'roadmaps' có cột 'user_id' và cột 'current_level' (hoặc 'level')
+        response = admin_supabase.table("roadmaps") \
+            .select("level") \
+            .eq("user_id", user_id) \
+            .single() \
+            .execute()
+            
+        # Trả về Level (ví dụ: 'A2', 'B1') hoặc 'B1' nếu không tìm thấy
+        user_level = response.data.get("level", "B1") 
+        return user_level
+        
+    except Exception as e:
+        # Ghi log lỗi và trả về level mặc định
+        print(f"Error fetching user level from roadmaps: {e}")
+        return "B1" # Default level nếu xảy ra lỗi truy vấn
+async def generate_vocab_for_deck_supabase(deck_id: int, topic_name: str, user_id: str):
+    """Task ngầm: Gọi AI và Insert dữ liệu hàng loạt."""
+    try:
+        user_level = await get_user_level(user_id)
+        prompt = prompts.build_topic_generation_prompt(topic_name, user_level)
+        response = await model.generate_content_async(prompt)
+        raw_words = json.loads(response.text.strip().replace("```json", "").replace("```", "")) 
+        
+        print("-" * 50)
+        print(f"DEBUG: STARTING AI TASK (Deck ID: {deck_id})")
+        print(f"DEBUG: USER ID: {user_id}")
+        print(f"DEBUG: CURRENT LEVEL (i): {user_level}")
+        print(f"DEBUG: PROMPT SENT TO GEMINI (i+1 Strategy):")
+        print(prompt)
+        print("-" * 50)
+
+
+        vocab_list = []
+        for item in raw_words:
+            details = get_word_details_from_api(item['word'])
+            vocab_list.append({
+                "deck_id": deck_id,
+                "user_id": user_id,
+                "word": item['word'],
+                "type": item.get('type') or details.get('type'),
+                "definition": item.get('meaning') or details.get('definition'),
+                "pronunciation": details.get('pronunciation'),
+                "context_sentence": item.get('context'),
+                "audio_url": details.get('audio_url')
+            })
+
+        if vocab_list:
+            admin_supabase.table("UserVocabulary").insert(vocab_list).execute()
+    except Exception as e:
+        print(f"Service Background Task Error: {e}")

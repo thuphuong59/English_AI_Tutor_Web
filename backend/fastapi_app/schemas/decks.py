@@ -102,3 +102,12 @@ class SmartQuestion(BaseModel):
 
 class QuizFeedbackRequest(BaseModel):
     missed_words: List[str] # Frontend chỉ cần gửi list các từ sai
+class TopicRequest(BaseModel):
+    """Schema dùng cho input khi người dùng click START topic"""
+    topic_name: str
+    lesson_id: str
+    
+class DeckResponse(BaseModel):
+    """Schema đơn giản trả về cho Frontend biết trạng thái của Deck"""
+    id: int 
+    status: str # Ví dụ: "exists" hoặc "generating"

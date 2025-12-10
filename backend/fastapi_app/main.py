@@ -9,7 +9,7 @@ from fastapi_app.routers import (
 )
 from fastapi_app.routers import audio
 # Thêm imports từ phiên bản đến (bỏ đi các imports bị trùng)
-from fastapi_app.routers import test_router, check_grammar_router, speech_router, assessment_router
+from fastapi_app.routers import test_router, check_grammar_router, speech_router, assessment_router, quiz_grammar_router
 # Lưu ý: 'auth_router' trùng với 'auth' đã có, nên tôi dùng 'auth'
 
 BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
@@ -39,6 +39,7 @@ app.include_router(conversation.router)
 app.include_router(user.router)
 app.include_router(vocabulary.router, prefix="/api")
 app.include_router(decks.router, prefix="/api")
+# app.include_router(decks.router)
 app.include_router(public_decks.router, prefix="/api")
 app.include_router(analysis.router, prefix="/api") 
 app.include_router(grammar_check.router, prefix="/api")
@@ -51,7 +52,7 @@ app.include_router(check_grammar_router.router)
 # Auth router đã có, nên không include lại
 app.include_router(speech_router.router)
 app.include_router(assessment_router.router)
-
+app.include_router(quiz_grammar_router.router, prefix="/api")
 
 @app.get("/") 
 async def root():
