@@ -4,8 +4,14 @@
 import React, { useState, useEffect } from "react";
 import toast from "react-hot-toast";
 import { useRouter } from "next/navigation"; // Hook điều hướng
+import { Loader2 } from "lucide-react"; // Import Loader2
 
-// TaskGroup component (Đã sửa để truyền taskType)
+// --- Khai báo Prop Interface ---
+interface RoadmapSectionProps {
+    userLevel: string; // ✅ Đã thêm prop userLevel
+}
+
+// TaskGroup component (Giữ nguyên)
 const TaskGroup = ({ title, tasks, userProgress, onStart, taskType }: any) => {
     if (!tasks || tasks.length === 0) return null;
     return (
@@ -36,7 +42,8 @@ const TaskGroup = ({ title, tasks, userProgress, onStart, taskType }: any) => {
     );
 };
 
-export function RoadmapSection() {
+// ✅ Cập nhật component để nhận userLevel
+export function RoadmapSection({ userLevel }: RoadmapSectionProps) {
     const router = useRouter(); 
     const [roadmap, setRoadmap] = useState<any>(null);
     const [isLoading, setIsLoading] = useState(true);
@@ -49,20 +56,38 @@ export function RoadmapSection() {
             try {
                 const userId = localStorage.getItem("authenticatedUserId");
                 if (!userId) return;
+                
                 // Log: GET /assessment/{userId} (load roadmap)
                 const res = await fetch(`http://localhost:8000/assessment/${userId}`); 
+                
+                // --- Xử lý lỗi Roadmap Not Found (Tùy chọn) ---
+                if (!res.ok) {
+                    // Nếu lỗi 404 (Không có Roadmap) hoặc lỗi khác
+                    if (res.status === 404) {
+                        setRoadmap({ roadmap: [], userProgress: {} });
+                        return;
+                    }
+                    const errorData = await res.json();
+                    throw new Error(errorData.detail || `Lỗi ${res.status} khi tải Roadmap.`);
+                }
+                
                 const data = await res.json();
                 const rawData = data.data?.roadmap || data.roadmap || {};
                 const roadmapArray = (rawData.learning_phases || []).map((s: any) => ({
                     ...s, stage_number: s.phase_name, weeks: s.weeks || []
                 }));
                 setRoadmap({ roadmap: roadmapArray, userProgress: rawData.userProgress || {} });
-            } catch (err) { console.error(err); } finally { setIsLoading(false); }
+            } catch (err) { 
+                console.error(err); 
+                toast.error("Không thể tải lộ trình.");
+            } finally { 
+                setIsLoading(false); 
+            }
         }
         loadRoadmap();
     }, []);
 
-    // Logic xử lý khi click START (Nhận taskType)
+    // ✅ Logic xử lý khi click START (Sử dụng userLevel từ props)
     const handleStartActivity = async (lessonId: string, topicTitle: string, taskType: string) => {
         const userId = localStorage.getItem("authenticatedUserId");
         const token = localStorage.getItem("access_token"); 
@@ -76,16 +101,27 @@ export function RoadmapSection() {
             "Authorization": `Bearer ${token}` 
         };
 
-        // --- GRAMMAR & SPEAKING Logic ---
-        if (taskType === 'grammar' || taskType === 'speaking') {
-            const endpoint = taskType === 'grammar' ? `/api/quiz-grammar/start` : `/api/tests/start-speaking`;
-            const loadingMsg = `Đang tạo bài ${taskType === 'grammar' ? 'kiểm tra Ngữ pháp' : 'thực hành Nói'}: ${topicTitle}...`;
+        // 🚨 LOGIC CHUYỂN HƯỚNG SPEAKING
+        if (taskType === 'speaking') {
+            // ✅ SỬ DỤNG userLevel từ props
+            const currentLevel = userLevel; 
+            
+            toast.success(`Chuyển sang luyện tập Nói Tự do với chủ đề: ${topicTitle}`);
+            
+            // Chuyển hướng đến trang Conversation với Level thực tế
+            router.push(`/conversation?mode=free&level=${currentLevel}&topic=${encodeURIComponent(topicTitle)}`);
+            return;
+        }
+        
+        // --- LOGIC GRAMMAR (Nếu không phải speaking, tiếp tục xử lý) ---
+        if (taskType === 'grammar') {
+            const endpoint = `/api/quiz-grammar/start`;
+            const loadingMsg = `Đang tạo bài kiểm tra Ngữ pháp: ${topicTitle}...`;
             
             setIsGenerating(true);
             const grammarLoadingId = toast.loading(loadingMsg);
             
             try {
-                // Log: POST /api/quiz-grammar/start
                 const response = await fetch(`http://localhost:8000${endpoint}`, {
                     method: "POST",
                     headers: headers,
@@ -95,20 +131,12 @@ export function RoadmapSection() {
                 
                 if (response.ok) {
                     toast.success("Bài học đã sẵn sàng!", { id: grammarLoadingId });
-                    
-                    if (taskType === 'grammar') {
-                        // CHUYỂN HƯỚNG ĐÚNG ĐẾN TRANG QUIZ_GRAMMAR BẰNG QUERY PARAMETER
-                        router.push(`/quiz_grammar?sessionId=${result.id}`); 
-                    } else {
-                        // Chuyển hướng cho Speaking
-                        router.push(`/speaking/${result.id}`);
-                    }
+                    router.push(`/quiz_grammar?sessionId=${result.id}`); 
                 } else {
-                    // Xử lý lỗi (403 Đã hoàn thành, 404/500 Lỗi server, v.v.)
                     if (response.status === 403) {
-                         toast.error("Bạn đã hoàn thành bài học này.", { id: grammarLoadingId });
+                          toast.error("Bạn đã hoàn thành bài học này.", { id: grammarLoadingId });
                     } else {
-                         toast.error(result.detail || `Lỗi ${response.status}: Tạo bài học thất bại.`, { id: grammarLoadingId });
+                          toast.error(result.detail || `Lỗi ${response.status}: Tạo bài học thất bại.`, { id: grammarLoadingId });
                     }
                 }
             } catch (err: any) {
@@ -119,14 +147,13 @@ export function RoadmapSection() {
             return;
         }
 
-        // --- VOCABULARY Logic (Tạo Deck) ---
+        // --- LOGIC VOCABULARY (Giữ nguyên) ---
         if (taskType === 'vocabulary') {
             setIsGenerating(true);
             const loadingId = toast.loading(`AI đang soạn bài: ${topicTitle}...`);
 
             try {
-                // Log: POST /api/decks/start-topic
-                const response = await fetch(`http://localhost:8000/api/decks/start-topic`, {
+                 const response = await fetch(`http://localhost:8000/api/decks/start-topic`, {
                     method: "POST",
                     headers: headers,
                     body: JSON.stringify({ topic_name: topicTitle, lesson_id: lessonId })
@@ -136,10 +163,10 @@ export function RoadmapSection() {
 
                 if (response.ok) {
                     toast.success("Đã xong!", { id: loadingId });
-                    router.push(`/vocabulary/${result.id}`); // Chuyển hướng đến trang Vocabulary
+                    router.push(`/vocabulary/${result.id}`); 
                 } else {
                     if (response.status === 403) {
-                         toast.error("Bạn đã hoàn thành bài học này.", { id: loadingId });
+                          toast.error("Bạn đã hoàn thành bài học này.", { id: loadingId });
                     } else {
                         toast.error(result.detail || `Lỗi ${response.status}: Yêu cầu thất bại.`, { id: loadingId });
                     }
@@ -154,7 +181,7 @@ export function RoadmapSection() {
     };
 
     if (isLoading) return <div className="p-6">Đang tải lộ trình...</div>;
-    if (!roadmap?.roadmap) return null;
+    if (!roadmap?.roadmap || roadmap.roadmap.length === 0) return null; // Hiển thị null nếu không có Roadmap
 
     return (
         <div className="relative w-full space-y-8">
@@ -195,13 +222,8 @@ export function RoadmapSection() {
 
                                         {openWeekIndex[sIdx] === wIdx && (
                                             <div className="p-4 border-t space-y-6 animate-in duration-200">
-                                                {/* Gọi handleStartActivity và truyền taskType='grammar' */}
                                                 <TaskGroup title="Grammar focus" tasks={week.grammar.items} userProgress={roadmap.userProgress} onStart={handleStartActivity} taskType='grammar' />
-                                                
-                                                {/* Gọi handleStartActivity và truyền taskType='vocabulary' */}
                                                 <TaskGroup title="Vocabulary" tasks={week.vocabulary.items} userProgress={roadmap.userProgress} onStart={handleStartActivity} taskType='vocabulary' />
-                                                
-                                                {/* Gọi handleStartActivity và truyền taskType='speaking' */}
                                                 <TaskGroup title="Speaking skills" tasks={week.speaking.items} userProgress={roadmap.userProgress} onStart={handleStartActivity} taskType='speaking' />
                                                 
                                                 <div className="p-3 bg-blue-50/50 border border-blue-100 rounded-xl text-blue-700 text-[10px] font-semibold">

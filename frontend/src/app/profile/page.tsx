@@ -6,6 +6,7 @@ import { RoadmapSection } from "./components/RoadmapSection";
 export default function ProfilePage() {
   const [userData, setUserData] = useState({
     name: "Loading...",
+    email: "Loading...",
     level: "Calculating...",
     learnerType: "Student",
     avatar: null,
@@ -33,6 +34,7 @@ export default function ProfilePage() {
         const data = await res.json();
         setUserData({
           name: data.username,
+          email: data.email,
           level: data.level,
           learnerType: data.learner_type,
           avatar: data.avatar_url || null,
@@ -71,10 +73,12 @@ export default function ProfilePage() {
                   )}
                 </div>
                 <h3 className="text-2xl font-bold text-slate-800">{userData.name}</h3>
-                <p className="text-[#0067C5] font-medium text-sm">{userData.level}</p>
+                <p className="text-[#0067C5] font-medium text-sm">{userData.email}</p>
+                {/* <p className="text-[#0067C5] font-medium text-sm">{userData.level}</p> */}
               </div>
               
               <div className="mt-8 space-y-4">
+                <StatRow value={userData.level} label="Cấp độ hiện tại" icon="📊" />
                 <StatRow value={userData.currentGoal} label="Mục tiêu chính" icon="🎯" />
                 <StatRow value={userData.currentDuration} label="Thời gian dự kiến" icon="⏱️" />
               </div>
@@ -93,14 +97,14 @@ export default function ProfilePage() {
             <div className="bg-white p-6 md:p-8 rounded-3xl shadow-sm border border-slate-200">
               <div className="flex items-center justify-between mb-8">
                 <h2 className="text-2xl font-bold text-slate-800 flex items-center gap-3">
-                   Lộ trinh học tập của bạn
+                   Lộ trình học tập của bạn
                 </h2>
                 <span className="text-[10px] font-black text-[#0067C5] bg-[#EAF3FB] px-3 py-1 rounded-full uppercase">
                   Dữ liệu AI mới nhất
                 </span>
               </div>
               
-              <RoadmapSection />
+              <RoadmapSection userLevel={userData.level} />
             </div>
           </div>
         </div>
