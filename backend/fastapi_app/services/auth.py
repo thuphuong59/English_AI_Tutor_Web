@@ -4,12 +4,14 @@ from fastapi_app.database import db_client
 
 def signup_service(user):
     try:
+        # 1. Tạo user trong Supabase Auth
         result = db_client.auth.sign_up({
             "email": user.email,
             "password": user.password,
             "options": {
                 "data": {
                     "username": user.username or user.email.split("@")[0],
+                    "avatar_url": None
                 }
             }
         })
@@ -17,10 +19,22 @@ def signup_service(user):
         if not result.user:
             raise HTTPException(status_code=400, detail="Signup failed. Please try again.")
 
+        user_id = result.user.id
+        username = result.user.user_metadata.get("username")
+
+        # 2. Tạo bản ghi PROFILE mặc định
+        db_client.table("profiles").insert({
+            "id": user_id,
+            "username": username,
+            "avatar_url": None,
+            "badge": 0,
+            "last_login_date": None
+        }).execute()
+
         return {
-            "id": result.user.id,
+            "id": user_id,
             "email": result.user.email,
-            "username": result.user.user_metadata.get("username")
+            "username": username
         }
 
     except AuthApiError as e:

@@ -81,21 +81,25 @@ async def submit_assessment(request: Request):
 
 @router.get("/{user_id}")
 async def fetch_roadmap(user_id: str):
-    row = get_user_roadmap(user_id)
+    """
+    Truy xuất Roadmap gần nhất của người dùng.
+    Trả về 404 nếu không tìm thấy.
+    """
+    # Hàm get_user_roadmap đã được sửa để trả về None nếu không tìm thấy/lỗi
+    data = get_user_roadmap(user_id) 
 
-    if not row:
-        return JSONResponse(status_code=404, content={
-            "status": "error",
-            "message": "Không tìm thấy roadmap cho user này."
-        })
+    if not data:
+        # 🚨 ĐÃ SỬA: Dùng HTTPException 404 khi Roadmap rỗng
+        raise HTTPException(
+            status_code=404,
+            detail="Không tìm thấy lộ trình học tập cho user này. Vui lòng hoàn thành bài đánh giá."
+        )
 
-    # 'row' now contains: id, user_id, level, data, created_at, updated_at
+    # Nếu tìm thấy dữ liệu (data không phải None)
     return {
         "status": "success",
-        "id": row.get("id"),
-        "user_id": row.get("user_id"),
-        "level": row.get("level"),
-        "roadmap": row.get("data"),   # <-- đây mới là object final_roadmap
-        "created_at": row.get("created_at"),
-        "updated_at": row.get("updated_at"),
+        "level": data.get("level"),
+        "roadmap": data.get("data"), 
+        "created_at": data.get("created_at"),
+        "updated_at": data.get("updated_at"),
     }

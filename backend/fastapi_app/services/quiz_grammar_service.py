@@ -138,11 +138,13 @@ async def generate_quiz_questions(session_id: int, topic_name: str, user_id: str
 # GRADE & TRACK
 # ============================
 
+MASTERY_THRESHOLD = 0.80 # 80% điểm trở lên được coi là thành thạo
+
 async def grade_and_track_quiz(session_id: int, user_id: str, answers: Dict[int, str]):
     if admin_supabase is None:
         raise Exception("Supabase not initialized")
 
-    # GET QUESTIONS
+    # 1. GET QUESTIONS (Giữ nguyên logic chấm điểm hiện tại)
     res = admin_supabase.table("QuizQuestions") \
         .select("id, correct_answer, topic") \
         .eq("session_id", session_id).execute()
@@ -151,8 +153,8 @@ async def grade_and_track_quiz(session_id: int, user_id: str, answers: Dict[int,
     correct = 0
     wrong_topics = set()
 
-    for qid, ans in answers.items():
-        qid = int(qid)
+    for qid_str, ans in answers.items():
+        qid = int(qid_str)
         if qid in db_questions:
             if ans == db_questions[qid]["correct_answer"]:
                 correct += 1
@@ -162,26 +164,49 @@ async def grade_and_track_quiz(session_id: int, user_id: str, answers: Dict[int,
     total = len(db_questions)
     score = correct / total if total else 0
 
-    # UPDATE SESSION
+    # 2. XÁC ĐỊNH THÀNH THẠO (MASTERED)
+    mastery_achieved = score >= MASTERY_THRESHOLD
+    
+    # Chuẩn bị báo cáo điểm yếu/khuyến nghị
+    weak_areas_report = []
+    if not mastery_achieved:
+        # Nếu không đạt ngưỡng, ghi lại chủ đề chính và yêu cầu ôn tập
+        session_info = admin_supabase.table("QuizSessions").select("topic").eq("id", session_id).single().execute()
+        topic_chinh = session_info.data["topic"]
+        
+        # Có thể thêm thông tin chi tiết về các sub-topic lỗi nếu cần, 
+        # nhưng hiện tại chỉ cần báo cáo chung về chủ đề chính.
+        weak_areas_report.append(f"Cần ôn tập: {topic_chinh} (Điểm: {score*100:.0f}%)")
+    else:
+        weak_areas_report.append("Đã thành thạo chủ đề này.")
+
+
+    # 3. UPDATE SESSION
     admin_supabase.table("QuizSessions").update({
         "status": "COMPLETED",
         "score": score,
-        "weak_areas": list(wrong_topics)
+        "weak_areas": weak_areas_report # Lưu báo cáo thành thạo
     }).eq("id", session_id).execute()
 
-    # Mark completed
-    session_info = admin_supabase.table("QuizSessions") \
-        .select("topic").eq("id", session_id).single().execute()
+    # 4. MARK COMPLETED ONLY IF MASTERY IS ACHIEVED
+    if mastery_achieved:
+        # Lấy lại session info
+        session_info = admin_supabase.table("QuizSessions") \
+            .select("topic").eq("id", session_id).single().execute()
 
-    admin_supabase.table("CompletedTopics").insert({
-        "user_id": user_id,
-        "lesson_id": session_info.data["topic"],
-        "topic_type": "grammar"
-    }).execute()
+        admin_supabase.table("CompletedTopics").insert({
+            "user_id": user_id,
+            "lesson_id": session_info.data["topic"], # "topic" là lesson_id trong context này
+            "topic_type": "grammar"
+        }).execute()
+        print(f"[DEBUG] Mastery Achieved ({score:.2f}). Lesson marked COMPLETED.")
+    else:
+        print(f"[DEBUG] Mastery FAILED ({score:.2f}). Lesson NOT marked COMPLETED.")
 
     return {
         "score_percent": score,
         "correct_count": correct,
         "total_questions": total,
-        "weak_areas": list(wrong_topics)
+        "mastery_achieved": mastery_achieved, # TRẢ VỀ TRẠNG THÁI THÀNH THẠO
+        "weak_areas": weak_areas_report
     }

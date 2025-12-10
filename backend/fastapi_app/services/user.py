@@ -69,25 +69,59 @@ async def change_password_service(request, current_user):
 
 async def get_profile_service(current_user):
     try:
-        db_user_res = admin_supabase.table("profiles").select("*").eq("id", current_user.id).maybe_single().execute()
-        
-        # Thêm select cột 'data' để lấy mục tiêu chi tiết
-        db_roadmap_res = admin_supabase.table("roadmaps").select("level, data").eq("user_id", current_user.id).order("created_at", desc=True).limit(1).maybe_single().execute()
-        
-        profile_data = db_user_res.data if db_user_res.data else {}
-        roadmap_row = db_roadmap_res.data if db_roadmap_res.data else {}
-        roadmap_content = roadmap_row.get("data", {})
-        
-        raw_status = roadmap_content.get("current_status", "") # Ví dụ: "Mục tiêu: Công việc, Phỏng vấn • Thời gian mong muốn: 2–3 tháng"
-        
-        # Logic tách chuỗi bằng regex hoặc split
+        # --- LẤY PROFILE ---
+        try:
+            db_user_res = (
+                admin_supabase.table("profiles")
+                .select("*")
+                .eq("id", current_user.id)
+                .single()
+                .execute()
+            )
+            profile_data = db_user_res.data or {}
+        except Exception:
+            # Không có profile → profile mới → trả mặc định
+            profile_data = {}
+
+        # --- LẤY ROADMAP ---
+        try:
+            db_roadmap_res = (
+                admin_supabase.table("roadmaps")
+                .select("level, data")
+                .eq("user_id", current_user.id)
+                .order("created_at", desc=True)
+                .limit(1)
+                .single()
+                .execute()
+            )
+            roadmap_row = db_roadmap_res.data or {}
+        except Exception:
+            roadmap_row = {}
+
+        # Nếu không có roadmap → trả mặc định
+        if not roadmap_row:
+            return {
+                "id": current_user.id,
+                "email": current_user.email,
+                "username": profile_data.get("username", "Người dùng"),
+                "avatar_url": profile_data.get("avatar_url"),
+                "level": "Chưa có",
+                "current_goal": "Chưa có",
+                "current_duration": "Chưa có",
+                "learner_type": "Beginner Learner",
+            }
+
+        roadmap_content = roadmap_row.get("data", {}) or {}
+        raw_status = roadmap_content.get("current_status", "")
+
         goal = "Chưa xác định"
         duration = "Chưa rõ"
-        
+
         if "•" in raw_status:
             parts = raw_status.split("•")
-            goal = parts[0].replace("Mục tiêu:", "").strip()
-            duration = parts[1].replace("Thời gian mong muốn:", "").strip()
+            if len(parts) >= 2:
+                goal = parts[0].replace("Mục tiêu:", "").strip()
+                duration = parts[1].replace("Thời gian mong muốn:", "").strip()
 
         return {
             "id": current_user.id,
@@ -95,14 +129,18 @@ async def get_profile_service(current_user):
             "username": profile_data.get("username", "Người dùng"),
             "avatar_url": profile_data.get("avatar_url"),
             "level": roadmap_row.get("level", "Chưa xác định"),
-            "current_goal": goal,      # Gửi riêng Mục tiêu
-            "current_duration": duration, # Gửi riêng Thời gian
-            "learner_type": "Intermediate Learner" if "B1" in str(roadmap_row.get("level", "")) else "Beginner Learner"
+            "current_goal": goal,
+            "current_duration": duration,
+            "learner_type": (
+                "Intermediate Learner"
+                if "B1" in str(roadmap_row.get("level", ""))
+                else "Beginner Learner"
+            )
         }
-    except Exception as e:
-        print(f"LỖI HÀM GET_PROFILE: {str(e)}")
-        raise HTTPException(status_code=400, detail=str(e))
 
+    except Exception as e:
+        print("LỖI HÀM GET_PROFILE:", e)
+        raise HTTPException(status_code=400, detail=str(e))
 def get_user_level(user_id: str) -> str:
     """Truy vấn Supabase để lấy Level của người dùng từ bảng roadmaps."""
     try:

@@ -521,7 +521,7 @@ def get_user_roadmap(user_id: str):
     try:
         res = (
             admin_supabase.table("roadmaps")
-            .select("*")
+            .select("id, level, data, created_at")   # ← CHỈ SELECT CÁC CỘT CỤ THỂ (không dùng *)
             .eq("user_id", user_id)
             .order("created_at", desc=True)
             .limit(1)
@@ -529,13 +529,13 @@ def get_user_roadmap(user_id: str):
             .execute()
         )
 
-        # 🎯 FIX: Kiểm tra an toàn cho cả res và res.data
-        if res and hasattr(res, 'data') and res.data:
-            return res.data
-        else:
-            logger.warning(f"Không tìm thấy dữ liệu lộ trình cho user_id: {user_id}")
-            return None 
+        # Nếu không có bản ghi => trả về None
+        if not getattr(res, "data", None):
+            logger.info(f"[get_user_roadmap] No roadmap found for user_id={user_id}")
+            return None
+
+        return res.data
 
     except Exception as e:
-        logger.error(f"Lỗi truy xuất roadmap: {e}")
+        logger.exception(f"[get_user_roadmap] Lỗi truy xuất roadmap: {e}")
         return None
