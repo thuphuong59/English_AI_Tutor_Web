@@ -69,15 +69,55 @@ async def change_password_service(request, current_user):
 
 async def get_profile_service(current_user):
     try:
-        db_user = admin_supabase.table("profiles").select("*").eq("id", current_user.id).execute()
-        meta = getattr(current_user, "user_metadata", {}) or {}
+        db_user_res = admin_supabase.table("profiles").select("*").eq("id", current_user.id).maybe_single().execute()
+        
+        # Thêm select cột 'data' để lấy mục tiêu chi tiết
+        db_roadmap_res = admin_supabase.table("roadmaps").select("level, data").eq("user_id", current_user.id).order("created_at", desc=True).limit(1).maybe_single().execute()
+        
+        profile_data = db_user_res.data if db_user_res.data else {}
+        roadmap_row = db_roadmap_res.data if db_roadmap_res.data else {}
+        roadmap_content = roadmap_row.get("data", {})
+        
+        raw_status = roadmap_content.get("current_status", "") # Ví dụ: "Mục tiêu: Công việc, Phỏng vấn • Thời gian mong muốn: 2–3 tháng"
+        
+        # Logic tách chuỗi bằng regex hoặc split
+        goal = "Chưa xác định"
+        duration = "Chưa rõ"
+        
+        if "•" in raw_status:
+            parts = raw_status.split("•")
+            goal = parts[0].replace("Mục tiêu:", "").strip()
+            duration = parts[1].replace("Thời gian mong muốn:", "").strip()
 
         return {
             "id": current_user.id,
             "email": current_user.email,
-            "username": meta.get("username"),
-            "avatar_url": meta.get("avatar_url"),
-            "db_profile": db_user.data[0] if db_user.data else None
+            "username": profile_data.get("username", "Người dùng"),
+            "avatar_url": profile_data.get("avatar_url"),
+            "level": roadmap_row.get("level", "Chưa xác định"),
+            "current_goal": goal,      # Gửi riêng Mục tiêu
+            "current_duration": duration, # Gửi riêng Thời gian
+            "learner_type": "Intermediate Learner" if "B1" in str(roadmap_row.get("level", "")) else "Beginner Learner"
         }
     except Exception as e:
+        print(f"LỖI HÀM GET_PROFILE: {str(e)}")
         raise HTTPException(status_code=400, detail=str(e))
+
+def get_user_level(user_id: str) -> str:
+    """Truy vấn Supabase để lấy Level của người dùng từ bảng roadmaps."""
+    try:
+        # GIẢ ĐỊNH: Bảng 'roadmaps' có cột 'user_id' và cột 'current_level' (hoặc 'level')
+        response = admin_supabase.table("roadmaps") \
+            .select("level") \
+            .eq("user_id", user_id) \
+            .single() \
+            .execute()
+            
+        # Trả về Level (ví dụ: 'A2', 'B1') hoặc 'B1' nếu không tìm thấy
+        user_level = response.data.get("level", "B1") 
+        return user_level
+        
+    except Exception as e:
+        # Ghi log lỗi và trả về level mặc định
+        print(f"Error fetching user level from roadmaps: {e}")
+        return "B1" # Default level nếu xảy ra lỗi truy vấn

@@ -47,3 +47,21 @@ def build_vocab_enrichment_prompt(transcript_text: str, candidates: List[str]) -
       {{ "word": "string", "type": "string", "meaning": "string", "context": "string" }}
     ]
     """
+    
+def build_topic_generation_prompt(topic_name: str, user_level) -> str:
+    return f"""
+You are an English teacher specialized in CEFR methodology. 
+    The student's current proficiency level is **{user_level}**.
+    Your task is to generate exactly 20 essential English words or phrases for the topic: "{topic_name}".
+    CRUCIAL RULE: Apply the i+1 principle. The vocabulary must be designed to slightly challenge the student, meaning the level of the generated words must be approximately **ONE STEP ABOVE** their current level ({user_level}).
+    For each word, provide:
+    1. The word/phrase.
+    2. Part of speech (noun, verb, adjective, etc.).
+    3. A clear definition in English.
+    4. A natural example sentence using that word.
+
+    Return the result strictly in JSON format as a list of objects:
+    [
+      {{ "word": "string", "type": "string", "meaning": "string", "context": "string" }}
+    ]
+    """

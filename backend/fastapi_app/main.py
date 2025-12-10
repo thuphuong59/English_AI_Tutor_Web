@@ -8,8 +8,7 @@ from fastapi_app.routers import (
     decks, public_decks, grammar_check, quizgame
 )
 from fastapi_app.routers import audio
-from fastapi_app.routers import test_router, check_grammar_router, speech_router, assessment_router
-
+from fastapi_app.routers import test_router, check_grammar_router, speech_router, assessment_router, quiz_grammar_router
 
 BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 ENV_PATH = os.path.join(BASE_DIR, ".env")
@@ -37,6 +36,7 @@ app.include_router(conversation.router)
 app.include_router(user.router)
 app.include_router(vocabulary.router, prefix="/api")
 app.include_router(decks.router, prefix="/api")
+# app.include_router(decks.router)
 app.include_router(public_decks.router, prefix="/api")
 app.include_router(analysis.router, prefix="/api") 
 app.include_router(grammar_check.router, prefix="/api")
@@ -48,7 +48,7 @@ app.include_router(test_router.router)
 app.include_router(check_grammar_router.router)
 app.include_router(speech_router.router)
 app.include_router(assessment_router.router)
-
+app.include_router(quiz_grammar_router.router, prefix="/api")
 
 @app.get("/") 
 async def root():

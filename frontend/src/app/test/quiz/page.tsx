@@ -142,7 +142,7 @@ export default function QuizPage() {
             toast.success("Phân tích hoàn tất! Lộ trình đã được tạo.");
             
             setTimeout(() => {
-                window.location.href = "/roadmap";
+                window.location.href = "/profile";
             }, 800);
 
         } catch (error) {

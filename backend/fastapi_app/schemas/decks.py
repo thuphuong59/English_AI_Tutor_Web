@@ -107,3 +107,13 @@ class QuizResultCreate(BaseModel):
     deck_id: int | None = None
     score: int
     total_questions: int
+class TopicRequest(BaseModel):
+    """Schema dùng cho input khi người dùng click START topic"""
+    topic_name: str
+    lesson_id: str
+    
+class DeckResponse(BaseModel):
+    """Schema đơn giản trả về cho Frontend biết trạng thái của Deck"""
+    id: int 
+    status: str # Ví dụ: "exists" hoặc "generating"
+

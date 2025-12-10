@@ -50,7 +50,10 @@ from .decks import (
    AnalyzeResponse,
    QuizFeedbackRequest,
    SmartQuestion,
-   QuizResultCreate
+   QuizResultCreate,
+   TopicRequest,
+   DeckResponse
+   
 )
 from .grammar_check import (
     GrammarError,
