@@ -15,7 +15,7 @@ import os
 
 try:
     GOOGLE_API_KEY = os.getenv("GOOGLE_API_KEY")
-    print(f"DEBUG: Loaded API Key (first 5 chars): {GOOGLE_API_KEY[:5] if GOOGLE_API_KEY else 'NONE'}")
+    print(f"DEBUG: Loaded API Key (first 10 chars): {GOOGLE_API_KEY[:10] if GOOGLE_API_KEY else 'NONE'}")
     if not GOOGLE_API_KEY:
         model = None
     else:

@@ -13,6 +13,7 @@ from starlette.concurrency import run_in_threadpool
 from google.genai.errors import APIError
 import base64, mimetypes
 from fastapi_app.database import admin_supabase
+from fastapi_app.prompts.roadmap import build_roadmap_prompt
 import re # Import thư viện regex
 
 logger = logging.getLogger(__name__)
@@ -310,110 +311,12 @@ async def analyze_and_generate_roadmap(
     speaking_transcript = full_speaking_analysis[0]['transcript'] if has_speaking else "Không có dữ liệu nói."
 
     # CẬP NHẬT PROMPT ĐỂ TẠO CẤU TRÚC JSON CHI TIẾT THEO YÊU CẦU
-    roadmap_prompt = f"""
-    Bạn là chuyên gia thiết kế lộ trình học tiếng Anh giao tiếp cá nhân hóa. 
-    Bạn PHẢI trả về đúng và duy nhất một JSON hợp lệ, không có bất kỳ nội dung nào khác ngoài JSON.
-
-    Thông tin người học:
-    - Kết quả trắc nghiệm: {mcq_analysis}
-    - Điểm yếu nổi bật: {", ".join(weak_points_list) if weak_points_list else "Chưa xác định rõ"}
-    - Transcript nói mẫu: "{speaking_transcript}"
-    - Cam kết học mỗi ngày: {prefs_dict['daily_commitment']}
-    - Mục tiêu giao tiếp: {prefs_dict['communication_goal']}
-    - Thời gian mong muốn đạt mục tiêu: {prefs_dict['target_duration']}
-
-    Yêu cầu nghiêm ngặt:
-    1. Phân tích kết quả MCQ ({mcq_analysis}), kỹ năng nói ({speaking_transcript}) và phản xạ (latency) để tự đánh giá trình độ hiện tại của người học (ví dụ: A1, A2, B1...).
-    2. Viết nhận xét tổng quan (150-250 từ) bằng tiếng Việt cho key **"user_summary"**.
-    3. Tạo lộ trình học chi tiết phù hợp với level của người học và cải thiện được điểm yếu của họ, chia thành 2-4 giai đoạn (phase).
-    4. Mỗi giai đoạn PHẢI chứa mảng **"weeks"**.
-    5. Trong mỗi tuần, các key **"grammar"**, **"vocabulary"**, **"speaking"** PHẢI có cấu trúc phức hợp bao gồm **"title"**, **"lesson_id"**, và mảng **"items"** chi tiết (ít nhất 2 items).
-
-    TRẢ VỀ CHỈ MỘT JSON DUY NHẤT THEO ĐÚNG CẤU TRÚC SAU:
-
-    {{
-    "user_summary": "Nhận xét tổng quan bằng tiếng Việt (50-100 từ)...",
-    "estimated_level": "Ví dụ: Pre-Intermediate (A2)",  <-- AI TỰ ĐIỀN VÀO ĐÂY
-    "roadmap": {{
-        "summary": "Tóm tắt ngắn gọn lộ trình trong 1-2 câu",
-        "current_status": "Mục tiêu: {prefs_dict['communication_goal']} • Thời gian mong muốn: {prefs_dict['target_duration']}",
-        "daily_plan_recommendation": "Khuyến nghị học {prefs_dict['daily_commitment']} mỗi ngày, tập trung nói + từ vựng",
-        "learning_phases": [
-        {{
-            "phase_name": "Giai đoạn 1: Xây dựng nền tảng",
-            "duration_weeks": 4,
-            "weeks": [
-            {{
-                "week_number": 1,
-                "grammar": {{
-                    "title": "Present Simple & Present Continuous (review, cách dùng, cấu trúc)",
-                    "lesson_id": "P1_W1_Grammar",
-                    "items": [
-                        {{"title": "Ngữ pháp Present Simple", "lesson_id": "P1_W1_G_Theory1"}},
-                        {{"title": "Ngữ pháp Present Continuous", "lesson_id": "P1_W1_G_Theory2"}},
-                    ]
-                }},
-                "vocabulary": {{
-                    "title": "Daily routines, family, hobbies",
-                    "lesson_id": "P1_W1_Vocab",
-                    "items": [
-                        {{"title": "Từ vựng về Daily routines (10 từ)", "lesson_id": "P1_W1_V_Theory1"}},
-                        {{"title": "Từ vựng về Family (20)", "lesson_id": "P1_W1_V_Theory2"}},
-                        {{"title": "hobbies (25)", "lesson_id": "P1_W1_V_Theory3"}},
-
-                    ]
-                }},
-                "speaking": {{
-                    "title": "Giới thiệu bản thân, nói về 1 ngày của bạn (1-2 phút)",
-                    "lesson_id": "P1_W1_Speaking",
-                    "items": [
-                        {{"title": "Hội thoại chủ đề giới thiệu bản thân", "lesson_id": "P1_W1_S_conversation1"}},
-			            {{"title": "Hội thoại chủ đề 1 ngày của bạn", "lesson_id": "P1_W1_S_conversation2"}},
-                    ]
-                }},
-                "expected_outcome": "Nói trôi chảy câu cơ bản về bản thân và thói quen hàng ngày"
-            }},
-            {{
-                "week_number": 2,
-                "grammar": {{
-                    "title": "Câu cầu khiến & Câu trần thuật",
-                    "lesson_id": "P1_W2_Grammar",
-                    "items": [
-                        {{"title": "Câu cầu khiến", "lesson_id": "P1_W2_G_Theory1"}},
-                        {{"title": "Câu trần thuật", "lesson_id": "P1_W2_G_Theory2"}},
-                    ]
-                }},
-                "vocabulary": {{
-                    "title": "Du lịch & Ẩm thực",
-                    "lesson_id": "P1_W2_Vocab",
-                    "items": [
-                        {{"title": "Từ vựng về du lịch", "lesson_id": "P1_W2_V_Theory1"}},
-                        {{"title": "Từ vựng về ẩm thực", "lesson_id": "P1_W2_V_Theory2"}}
-                    ]
-                }},
-                "speaking": {{
-                    "title": "Kể lại một trải nghiệm du lịch gần đây (2 phút)",
-                    "lesson_id": "P1_W2_Speaking",
-                    "items": [
-                        {{"title": "Hội thoại kể lại một trải nghiệm du lịch gần đây", "lesson_id": "P1_W1_S_conversation1"}},
-                    ]
-                }},
-                "expected_outcome": "Kể chuyện quá khứ có sử dụng mốc thời gian"
-            }}
-            ]
-        }}
-        ]
-    }}
-    }}
-
-    QUAN TRỌNG:
-    - Tổng số tuần của tất cả các giai đoạn phải hợp lý với thời gian mục tiêu ({prefs_dict['target_duration']}).
-    - Tập trung khắc phục điểm yếu: {", ".join(weak_points_list) if weak_points_list else "cân bằng các kỹ năng"}.
-    - Speaking task phải thực tế, có thể ghi âm và tự sửa.
-    - Expected outcome phải đo lường được (thời lượng nói, số lỗi, độ trôi chảy...).
-
-    Bắt đầu ngay bằng JSON, không viết gì thêm.
-    """
+    roadmap_prompt = build_roadmap_prompt(
+        mcq_analysis=mcq_analysis,
+        weak_points_list=weak_points_list,
+        speaking_transcript=speaking_transcript,
+        prefs_dict=prefs_dict,
+    )
 
     try:
         roadmap_response = await run_in_threadpool(

@@ -171,8 +171,8 @@ export default function QuizPage() {
         <main className="min-h-screen flex flex-col">
             {showLoading && (
                 <LoadingModal
-                title="Đang phân tích bài làm..."
-                message="AI đang đánh giá kết quả và tạo lộ trình cá nhân hóa. Vui lòng chờ."
+                title="Analyzing your submission.."
+                message="AI is analyzing your results and creating your personalized roadmap. Please wait."
                 />
             )}
             <div className="flex mt-6 px-6">

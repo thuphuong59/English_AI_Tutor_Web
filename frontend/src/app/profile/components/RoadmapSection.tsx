@@ -150,7 +150,7 @@ export function RoadmapSection({ userLevel }: RoadmapSectionProps) {
         // --- LOGIC VOCABULARY (Giữ nguyên) ---
         if (taskType === 'vocabulary') {
             setIsGenerating(true);
-            const loadingId = toast.loading(`AI đang soạn bài: ${topicTitle}...`);
+            const loadingId = toast.loading(`AI is preparing your lesson: ${topicTitle}...`);
 
             try {
                  const response = await fetch(`http://localhost:8000/api/decks/start-topic`, {
@@ -190,7 +190,7 @@ export function RoadmapSection({ userLevel }: RoadmapSectionProps) {
                 <div className="fixed inset-0 bg-white/60 z-[9999] flex items-center justify-center backdrop-blur-sm">
                     <div className="bg-white p-6 rounded-3xl shadow-2xl flex flex-col items-center">
                         <div className="w-12 h-12 border-4 border-blue-600 border-t-transparent rounded-full animate-spin"></div>
-                        <p className="mt-4 text-blue-600 font-bold">Gemini AI đang soạn bài...</p>
+                        <p className="mt-4 text-blue-600 font-bold">Gemini AI is preparing the lesson....</p>
                     </div>
                 </div>
             )}
@@ -201,7 +201,7 @@ export function RoadmapSection({ userLevel }: RoadmapSectionProps) {
                         <div className="bg-blue-600 p-5 flex justify-between items-center cursor-pointer" onClick={() => setOpenStageIndex(openStageIndex === sIdx ? null : sIdx)}>
                             <h3 className="text-white font-bold text-sm">{stage.stage_number}</h3>
                             <div className="flex items-center gap-3 text-white">
-                                <span className="text-[10px] font-black bg-white/20 px-2 py-0.5 rounded-md">{stage.duration_weeks} TUẦN</span>
+                                <span className="text-[10px] font-black bg-white/20 px-2 py-0.5 rounded-md">{stage.duration_weeks} WEEK</span>
                                 <span>{openStageIndex === sIdx ? "▲" : "▼"}</span>
                             </div>
                         </div>
@@ -215,7 +215,7 @@ export function RoadmapSection({ userLevel }: RoadmapSectionProps) {
                                                 <div className={`w-9 h-9 rounded-xl flex items-center justify-center font-black text-xs ${openWeekIndex[sIdx] === wIdx ? 'bg-blue-600 text-white' : 'bg-slate-50 text-slate-400'}`}>
                                                     {week.week_number}
                                                 </div>
-                                                <span className="font-bold text-slate-700 text-xs">Tuần {week.week_number}</span>
+                                                <span className="font-bold text-slate-700 text-xs">Week {week.week_number}</span>
                                             </div>
                                             <span className="text-slate-300 text-[10px] uppercase font-bold">{openWeekIndex[sIdx] === wIdx ? "Đóng" : "Mở"}</span>
                                         </div>

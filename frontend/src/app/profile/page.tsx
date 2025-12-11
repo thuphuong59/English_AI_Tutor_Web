@@ -77,16 +77,16 @@ export default function ProfilePage() {
               </div>
               
               <div className="mt-8 space-y-4">
-                <StatRow value={userData.level} label="Cấp độ hiện tại" icon="📊" />
-                <StatRow value={userData.currentGoal} label="Mục tiêu chính" icon="🎯" />
-                <StatRow value={userData.currentDuration} label="Thời gian dự kiến" icon="⏱️" />
+                <StatRow value={userData.level} label="Current Level" icon="📊" />
+                <StatRow value={userData.currentGoal} label="Main Goal" icon="🎯" />
+                <StatRow value={userData.currentDuration} label="Estimated Duration" icon="⏱️" />
               </div>
             </div>
 
             <div className="bg-gradient-to-br from-[#0067C5] to-[#004a8d] p-6 rounded-3xl text-white shadow-lg">
-              <h4 className="font-bold mb-2 text-sm">💡 Tips hôm nay</h4>
+              <h4 className="font-bold mb-2 text-sm">💡 Today’s tips</h4>
               <p className="text-[13px] text-blue-100 leading-relaxed italic">
-                "Hãy dành ít nhất 15 phút luyện nghe mỗi ngày để duy trì phản xạ nhé!"
+                "Spend at least 15 minutes practicing listening every day to maintain your reflexes!"
               </p>
             </div>
           </aside>
@@ -96,10 +96,10 @@ export default function ProfilePage() {
             <div className="bg-white p-6 md:p-8 rounded-3xl shadow-sm border border-slate-200">
               <div className="flex items-center justify-between mb-8">
                 <h2 className="text-2xl font-bold text-slate-800 flex items-center gap-3">
-                   Lộ trình học tập của bạn
+                   Your Learning Roadmap
                 </h2>
                 <span className="text-[10px] font-black text-[#0067C5] bg-[#EAF3FB] px-3 py-1 rounded-full uppercase">
-                  Dữ liệu AI mới nhất
+                  Latest AI Data
                 </span>
               </div>
               
@@ -118,7 +118,7 @@ function StatRow({ value, label, icon }: { value: string, label: string, icon: s
       <div className="w-10 h-10 bg-white shadow-sm border border-slate-100 rounded-xl flex items-center justify-center text-lg">{icon}</div>
       <div>
         <p className="text-slate-400 text-[10px] font-black uppercase tracking-wider">{label}</p>
-        <p className="text-slate-800 font-bold text-base leading-tight">{value || "Chưa cập nhật"}</p>
+        <p className="text-slate-800 font-bold text-base leading-tight">{value || "Not updated yet"}</p>
       </div>
     </div>
   );
