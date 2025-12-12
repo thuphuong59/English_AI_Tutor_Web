@@ -299,16 +299,6 @@ async def generate_vocab_for_deck_supabase(deck_id: int, topic_name: str, user_i
 logger = logging.getLogger(__name__)
 
 async def get_existing_deck_by_topic_name(user_id: str, topic_name: str) -> Optional[Dict[str, Any]]:
-    """
-    Truy vấn bảng Decks để tìm bản ghi Deck đã tồn tại dựa trên user_id và topic_name.
-    
-    Args:
-        user_id: UUID của người dùng.
-        topic_name: Tên chủ đề (topic_name) được gửi từ Frontend (ví dụ: "Tư vựng về thông tin cá nhân (tên, tuổi, quốc tịch, nghề nghiệp)").
-        
-    Returns:
-        Đối tượng Deck (Dict) chứa ít nhất 'id' nếu tìm thấy, ngược lại là None.
-    """
     if admin_supabase is None:
         logger.error("Supabase client is not initialized.")
         return None

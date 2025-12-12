@@ -9,6 +9,8 @@ from fastapi_app.crud import history as crud_history
 from fastapi_app.crud import scenarios as crud_scenarios
 from fastapi_app.utils.gemini_file_manager import upload_audio_to_gemini
 from fastapi_app.prompts import conversation as prompts
+from fastapi_app.services import assessment_service
+import anyio
 
 # --- Config ---
 GEMINI_API_KEY = os.getenv("GOOGLE_API_KEY")
@@ -38,7 +40,8 @@ def delete_session(session_id: str, user_id: str):
     crud_history.delete_session(admin_supabase, session_id, user_id)
 
 # --- START ---
-async def start_conversation(mode: str, level: str, scenario_id: Optional[str], topic: Optional[str], user_id: str):
+async def start_conversation(mode: str, level: str, scenario_id: Optional[str], topic: Optional[str], user_id: str, lesson_id: Optional[str] = None):
+    print(f"DEBUG: Lesson ID nhận được từ Router: {lesson_id}")
     topic_to_save = topic
     greeting_text = ""
     user_suggestions = []
@@ -63,7 +66,7 @@ async def start_conversation(mode: str, level: str, scenario_id: Optional[str], 
         except Exception:
             greeting_text = f"Hi! Let's talk about {topic}. How are you?"
 
-    session = crud_history.create_session(admin_supabase, mode, level, topic_to_save, user_id)
+    session = crud_history.create_session(admin_supabase, mode, level, topic_to_save, user_id, lesson_id)
     crud_history.append_message_to_history(admin_supabase, session["id"], {
         "role": "ai", "text": greeting_text, "type": "greeting", "metadata": {}
     })
@@ -172,13 +175,44 @@ async def evaluate_scenario_voice(audio: UploadFile, scenario_id: str, level: st
     }
 
 # --- SUMMARIZE ---
-async def summarize_conversation(session_id: str, topic: str, level: str, messages: Optional[List[Dict[str, Any]]] = None):
-    session_data = crud_history.get_session_details(admin_supabase, session_id)
-    if not session_data: raise HTTPException(404, "Session not found")
-    
-    mode = session_data.get("mode", "free")
-    if not messages: messages = session_data.get("messages", [])
+CONVERSATION_MASTERY_THRESHOLD = 0.7 
 
+# Hàm hỗ trợ tính điểm trung bình (Chỉ tính các điểm số có giá trị)
+def calculate_average_score(metadata: Dict[str, Any]) -> float:
+    scores = []
+    
+    grammar_score = metadata.get("grammar")
+    vocabulary_score = metadata.get("vocabulary")
+    pronunciation_score = metadata.get("pronunciation")
+    
+    # Chỉ thêm vào list nếu giá trị là số (float hoặc int)
+    if isinstance(grammar_score, (float, int)) and grammar_score is not None:
+        scores.append(grammar_score)
+    if isinstance(vocabulary_score, (float, int)) and vocabulary_score is not None:
+        scores.append(vocabulary_score)
+    if isinstance(pronunciation_score, (float, int)) and pronunciation_score is not None:
+        scores.append(pronunciation_score)
+        
+    if scores:
+        return sum(scores) / len(scores)
+    return 0.0
+
+
+async def summarize_conversation(session_id: str, topic: str, level: str, messages: Optional[List[Dict[str, Any]]] = None):
+    
+    session_data = crud_history.get_session_details(admin_supabase, session_id)
+    if not session_data: 
+        raise HTTPException(404, "Session not found")
+    
+    # 1. Lấy dữ liệu cần thiết
+    lesson_id_to_mark = session_data.get("lesson_id")
+    user_id = session_data.get("user_id")
+    mode = session_data.get("mode", "free")
+    
+    if not messages: messages = session_data.get("messages", [])
+    session_already_summarized = any(m.get('type') == 'summary' for m in session_data.get('messages', []))
+
+    # 2. Logic tạo transcript (ĐÃ HOÀN CHỈNH)
     transcript_lines = []
     for m in messages:
         role = m.get('role', '').upper()
@@ -189,22 +223,86 @@ async def summarize_conversation(session_id: str, topic: str, level: str, messag
         if role == 'SYSTEM': continue
         if role == 'USER': transcript_lines.append(f"[USER]: {text}")
         elif msg_type == 'feedback':
+            # Chỉ log feedback chi tiết nếu có điểm/metadata liên quan
             pron_score = metadata.get('pronunciation_score', 'N/A')
-            transcript_lines.append(f"   >>> [LOG]: Pronunciation={pron_score} | Feedback='{text}'")
+            transcript_lines.append(f"   >>> [LOG]: Pronunciation={pron_score} | Feedback='{text}'")
         elif role == 'AI': transcript_lines.append(f"[AI]: {text}")
-
+    
     transcript = "\n".join(transcript_lines)
     if not transcript.strip(): return {"summary_text": "No content.", "summary_metadata": {}}
 
-    prompt = prompts.get_summary_prompt(mode, level, topic, transcript)
+    parsed = {"summary_text": "Error/Already summarized.", "summary_metadata": {}}
+    
+    if not session_already_summarized:
+        prompt = prompts.get_summary_prompt(mode, level, topic, transcript)
+        
+        try:
+            res = await summary_model.generate_content_async(prompt)
+            text_res = res.text.strip().replace("```json", "").replace("```", "")
+            parsed = json.loads(text_res)
+        except Exception as e:
+            # logger.error(f"Gemini Summarize Error: {e}") 
+            parsed = {"summary_text": "Error summarizing.", "summary_metadata": {}}
+        
+        # 3. LƯU summary VÀO DB
+        updated_msgs = messages + [{"role": "ai", "text": parsed.get("summary_text"), "type": "summary", "metadata": parsed.get("summary_metadata")}]
+        crud_history.update_session_summary(admin_supabase, session_id, parsed.get("summary_text"), updated_msgs)
+        
+    else:
+        # Lấy metadata cũ nếu đã có summary
+        last_summary = next((m for m in reversed(session_data.get('messages', [])) if m.get('type') == 'summary'), {})
+        parsed = {
+            'summary_text': last_summary.get('text', 'Already summarized.'),
+            'summary_metadata': last_summary.get('metadata', {})
+        }
 
-    try:
-        res = await summary_model.generate_content_async(prompt)
-        text_res = res.text.strip().replace("```json", "").replace("```", "")
-        parsed = json.loads(text_res)
-    except Exception:
-        parsed = {"summary_text": "Error summarizing.", "summary_metadata": {}}
 
-    updated_msgs = messages + [{"role": "ai", "text": parsed.get("summary_text"), "type": "summary", "metadata": parsed.get("summary_metadata")}]
-    crud_history.update_session_summary(admin_supabase, session_id, parsed.get("summary_text"), updated_msgs)
+    # ==========================================================
+    # 🚨 FIX TÍNH NĂNG: TÍNH ĐIỂM TỔNG HỢP VÀ CẬP NHẬT ROADMAP
+    # ==========================================================
+    if lesson_id_to_mark and user_id and mode in ["free", "scenario"] and not session_already_summarized:
+        
+        summary_metadata = parsed.get("summary_metadata", {})
+        overall_score = calculate_average_score(summary_metadata) # Tính trung bình 3 điểm
+        
+        mastery_achieved = overall_score >= CONVERSATION_MASTERY_THRESHOLD
+
+        try:
+            # 4. Lấy bản ghi Roadmap hiện tại và cập nhật
+            roadmap_record = await anyio.to_thread.run_sync(
+                assessment_service.get_user_roadmap, 
+                user_id 
+            )
+            
+            if roadmap_record and isinstance(roadmap_record, dict) and roadmap_record.get('data'):
+                
+                current_roadmap_data = roadmap_record['data']
+                current_progress = current_roadmap_data.get('user_progress', {})
+                roadmap_id = roadmap_record.get('id')
+
+                # 5. Cập nhật trạng thái của lesson_id đó
+                score_percentage = round(overall_score * 100)
+                
+                update_data = {
+                    "completed": mastery_achieved, 
+                    "score": score_percentage, 
+                    "type": "speaking" 
+                }
+
+                current_progress[lesson_id_to_mark] = update_data
+                current_roadmap_data['user_progress'] = current_progress
+
+                # 6. Lưu lại toàn bộ bản ghi roadmaps
+                if roadmap_id:
+                    admin_supabase.table("roadmaps") \
+                        .update({"data": current_roadmap_data}) \
+                        .eq("id", roadmap_id) \
+                        .execute()
+                    
+                    # logger.info(f"✅ [PROGRESS TRACKED] Speaking {lesson_id_to_mark} updated successfully.")
+
+        except Exception as e:
+            # logger.error(f"Lỗi trong quá trình cập nhật Roadmap (Conversation): {e}")
+            pass
+
     return parsed

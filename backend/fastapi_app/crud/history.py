@@ -1,6 +1,6 @@
 import json
 from supabase import Client
-from typing import List, Dict, Any
+from typing import List, Dict, Any, Optional
 from datetime import datetime
 import uuid
 
@@ -22,7 +22,7 @@ def get_session_details(db: Client, session_id: str):
         print(f"DB Error (get_session_details): {e}")
         return None
 
-def create_session(db: Client, mode: str, level: str, topic: str, user_id: str) -> Dict[str, Any]:
+def create_session(db: Client, mode: str, level: str, topic: str, user_id: str, lesson_id: Optional[str] = None) -> Dict[str, Any]:
     """Tạo session mới."""
     new_session = {
         "id": str(uuid.uuid4()),
@@ -31,7 +31,8 @@ def create_session(db: Client, mode: str, level: str, topic: str, user_id: str) 
         "level": level,
         "topic": topic,
         "messages": [], # Init empty JSON array
-        "created_at": datetime.utcnow().isoformat()
+        "created_at": datetime.utcnow().isoformat(),
+        "lesson_id": lesson_id
     }
     try:
         res = db.table("conversation_sessions").insert(new_session).execute()

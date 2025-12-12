@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, FC, useEffect, useRef } from "react";
+import { useState, FC, useEffect, useRef, useCallback } from "react";
 import { Award, PlayCircle, ArrowLeft, RefreshCw, Loader2, Menu, PanelLeftOpen } from "lucide-react";
 import { useSearchParams, useRouter } from "next/navigation"; 
 import ModeSelector from "./components/ModeSelector";
@@ -13,6 +13,8 @@ import HistorySidebar from "./components/HistorySideBar";
 import * as api from "../../services/api";
 import { analyzeConversationSession } from "../../services/vocabService";
 import { DisplayMessage, Scenario, HistorySession } from "./types";
+// Import toast nếu bạn sử dụng
+// import toast from "react-hot-toast"; 
 
 const ConversationPage: FC = () => {
     const [isSidebarOpen, setIsSidebarOpen] = useState(true); 
@@ -21,7 +23,6 @@ const ConversationPage: FC = () => {
     const searchParams = useSearchParams();
     const router = useRouter(); 
     
-    // 🚨 FIX FINAL: Cờ khởi tạo vĩnh viễn cho luồng tự động (chạy một lần duy nhất)
     const initialStartRef = useRef(false);
 
     // --- STATE MANAGEMENT ---
@@ -61,39 +62,7 @@ const ConversationPage: FC = () => {
             setHistoryLoading(false);
         }
     };
-
-    // 🚨 Logic Tự động khởi động từ Query Params (Chặn chạy lại bằng Ref)
-    useEffect(() => {
-        fetchHistory();
-        if (window.innerWidth < 1024) setIsSidebarOpen(false);
-
-        const urlMode = searchParams.get('mode');
-        const urlLevel = searchParams.get('level');
-        const urlTopic = searchParams.get('topic');
-        
-        // Chặn nếu Ref đã đánh dấu là đã khởi tạo, bất kể state nào
-        if (initialStartRef.current) return; 
-
-        // Kiểm tra đủ 3 tham số
-        if (urlMode === 'free' && urlTopic && urlLevel) {
-            
-            // 🚨 ĐÁNH DẤU REF: Đã cố gắng khởi tạo
-            initialStartRef.current = true;
-            
-            const decodedTopic = decodeURIComponent(urlTopic);
-            const decodedLevel = urlLevel;
-            
-            setChatLoading(true);
-
-            // Xóa Query Params NGAY LẬP TỨC để ngăn chặn re-render kép từ Router
-            router.replace('/conversation');
-            
-            // Gọi handleStart với tham số trực tiếp (FIX lỗi Race Condition/state trễ)
-            handleStart(null, decodedTopic, decodedLevel); 
-        }
-    }, [searchParams]); 
-
-    // --- ACTIONS ---
+    
     const speak = (text: string) => {
         if (!("speechSynthesis" in window)) return;
         window.speechSynthesis.cancel();
@@ -117,61 +86,37 @@ const ConversationPage: FC = () => {
         setInput("");
         setSessionId(null);
         
-        // Reset Ref khi bắt đầu lại (để có thể tự động khởi động nếu URL có params)
         initialStartRef.current = false;
     };
 
-    const handleLevelChange = (newLevel: string) => setLevel(newLevel);
-    const handleModeChange = (newMode: "scenario" | "free") => setMode(newMode);
 
-    const handleTopicSelect = async (topic: string) => {
-        setSelectedTopic(topic);
-        if (mode === "scenario") {
-            setChatLoading(true);
-            try {
-                const fetchedScenarios = await api.getScenarios(topic, level);
-                if (fetchedScenarios.length > 0) {
-                    setScenarios(fetchedScenarios);
-                    setView("scenarios");
-                } else {
-                    alert(`No scenarios found for "${topic}" at this level.`);
-                    setSelectedTopic(null);
-                }
-            } catch (e) {
-                alert(String(e));
-            } finally {
-                setChatLoading(false);
-            }
-        } else {
-            handleStart(null, topic);
-        }
-    };
-
-    const handleBackToTopics = () => {
-        setView("topics");
-        setSelectedTopic(null);
-        setScenarios([]);
-    };
-
-    // 🚨 HÀM handleStart - SỬ DỤNG THAM SỐ TRỰC TIẾP
-    const handleStart = async (scenario: Scenario | null, topicFromInput?: string, levelFromInput?: string) => {
+    // 🚨 HÀM handleStart - ĐÃ SỬA LỖI HIỂN THỊ CẢNH BÁO
+    const handleStart = async (
+        scenario: Scenario | null, 
+        topicFromInput?: string, 
+        levelFromInput?: string, 
+        lessonIdFromUrl?: string | undefined 
+    ) => {
         setIsViewingHistory(false);
         
-        // FIX 1: Ưu tiên Tham số URL/Input
         const currentLevel = levelFromInput || level;
         const currentTopic = scenario?.title || topicFromInput || selectedTopic;
         
         if (!currentTopic) return;
         setChatLoading(true);
 
-        // FIX 2 & LỖI 400: Xác định Mode cuối cùng và Scenario ID
         const finalMode = topicFromInput ? "free" : mode;
         const scenarioIdRaw = finalMode === "free" ? null : scenario?.id;
         const finalScenarioId = scenarioIdRaw ?? undefined; 
         
         try {
-            // Gửi finalMode và finalScenarioId đã được xác định lên Backend
-            const res = await api.startConversation(finalMode, currentLevel, finalScenarioId, currentTopic);
+            const res = await api.startConversation(
+                finalMode, 
+                currentLevel, 
+                finalScenarioId, 
+                currentTopic, 
+                lessonIdFromUrl
+            );
             
             const sessionIdFromApi = res.session_id ?? null;
             setSessionId(sessionIdFromApi);
@@ -197,12 +142,97 @@ const ConversationPage: FC = () => {
             setSessionId(res.session_id ?? null);
             if (window.innerWidth < 1024) setIsSidebarOpen(false);
             
-        } catch (e) {
-            alert(String(e));
+        } catch (e: any) {
+            // 🚨 FIX: Xử lý lỗi để hiển thị JSON chi tiết (thay vì [object Object])
+            let errorMessage: string;
+            
+            if (e && e.message) {
+                // Lấy thông báo lỗi chính (thường là lỗi từ handleResponse của api.ts)
+                errorMessage = e.message;
+            } else if (typeof e === 'object' && e !== null) {
+                // Nếu lỗi là đối tượng JSON (chứa chi tiết lỗi validation)
+                errorMessage = JSON.stringify(e, null, 2); 
+            } else {
+                errorMessage = String(e);
+            }
+
+            console.error("API Error Detail:", errorMessage);
+            alert(`Lỗi khởi tạo hội thoại: ${errorMessage}`);
         } finally {
             setChatLoading(false);
         }
     };
+    
+    // 🚨 Logic Tự động khởi động từ Query Params (Chặn chạy lại bằng Ref)
+    useEffect(() => {
+        fetchHistory();
+        if (window.innerWidth < 1024) setIsSidebarOpen(false);
+
+        const urlMode = searchParams.get('mode');
+        const urlLevel = searchParams.get('level');
+        const urlTopic = searchParams.get('topic');
+        const urlLessonId = searchParams.get('lesson_id'); // string | null
+
+        
+        // Chặn nếu Ref đã đánh dấu là đã khởi tạo, bất kể state nào
+        if (initialStartRef.current) return; 
+
+        // Kiểm tra đủ 3 tham số
+        if (urlMode === 'free' && urlTopic && urlLevel) {
+            
+            // 🚨 ĐÁNH DẤU REF: Đã cố gắng khởi tạo
+            initialStartRef.current = true;
+            
+            const decodedTopic = decodeURIComponent(urlTopic);
+            const decodedLevel = urlLevel;
+            
+            setChatLoading(true);
+
+            // Xóa Query Params NGAY LẬP TỨC để ngăn chặn re-render kép từ Router
+            router.replace('/conversation');
+            
+            // 🚨 FIX LỖI TYPESCRIPT: Chuyển đổi null từ searchParams thành undefined
+            const lessonIdToPass = urlLessonId ?? undefined; 
+
+            // Gọi handleStart với tham số trực tiếp 
+            handleStart(null, decodedTopic, decodedLevel, lessonIdToPass); 
+        }
+    }, [searchParams]); 
+
+
+    const handleLevelChange = (newLevel: string) => setLevel(newLevel);
+    const handleModeChange = (newMode: "scenario" | "free") => setMode(newMode);
+
+    const handleTopicSelect = async (topic: string) => {
+        setSelectedTopic(topic);
+        if (mode === "scenario") {
+            setChatLoading(true);
+            try {
+                const fetchedScenarios = await api.getScenarios(topic, level);
+                if (fetchedScenarios.length > 0) {
+                    setScenarios(fetchedScenarios);
+                    setView("scenarios");
+                } else {
+                    alert(`No scenarios found for "${topic}" at this level.`);
+                    setSelectedTopic(null);
+                }
+            } catch (e) {
+                alert(String(e));
+            } finally {
+                setChatLoading(false);
+            }
+        } else {
+            // Khi click từ Topic Selector, không có lessonId từ Roadmap
+            handleStart(null, topic);
+        }
+    };
+
+    const handleBackToTopics = () => {
+        setView("topics");
+        setSelectedTopic(null);
+        setScenarios([]);
+    };
+
 
     const handleLoadSession = async (selectedSessionId: string) => {
         setIsViewingHistory(true);
@@ -551,114 +581,114 @@ const ConversationPage: FC = () => {
                     )
                 ) : (
                 
-                // =========================
-                // CHAT INTERFACE
-                // =========================
-                <div className="flex-1 flex flex-col h-full bg-[#FAFBFC] relative">
-                    
-                    {/* Header */}
-                    <header className="h-16 bg-white border-b border-slate-100 px-6 flex items-center justify-between z-20 flex-shrink-0">
-                        <div className="flex items-center gap-4">
-                            {!isSidebarOpen && (
-                                <button 
-                                    onClick={() => setIsSidebarOpen(true)}
-                                    className="p-2 hover:bg-slate-100 rounded-lg text-slate-500 transition-colors"
-                                >
-                                    <Menu size={20} />
-                                </button>
-                            )}
-                            
-                            <div>
-                                <h4 className="font-bold text-lg text-slate-800 leading-none">
-                                    {activeScenario?.title || selectedTopic || "Conversation"}
-                                </h4>
-                                <div className="flex items-center gap-2 mt-1">
-                                    <span className="text-[10px] uppercase font-bold tracking-wider px-1.5 py-0.5 rounded bg-slate-100 text-slate-500">
-                                        {mode}
-                                    </span>
-                                    <span className="text-[10px] uppercase font-bold tracking-wider px-1.5 py-0.5 rounded bg-slate-100 text-slate-500">
-                                        {level}
-                                    </span>
-                                </div>
-                            </div>
-                        </div>
+                    // =========================
+                    // CHAT INTERFACE
+                    // =========================
+                    <div className="flex-1 flex flex-col h-full bg-[#FAFBFC] relative">
                         
-                        <button 
-                            onClick={resetConversation}
-                            className="px-4 py-2 bg-slate-100 hover:bg-red-50 text-slate-600 hover:text-red-600 rounded-lg text-sm font-medium transition-colors"
-                        >
-                            Exit
-                        </button>
-                    </header>
-
-                    {/* Chat Area */}
-                    <div className="flex-1 overflow-y-auto px-4 py-6 scroll-smooth">
-                        <div className="max-w-3xl mx-auto w-full h-full pb-32">
-                            <ChatArea
-                                messages={messages}
-                                loading={chatLoading}
-                                onSpeak={speak}
-                            />
-                        </div>
-                    </div>
-
-                    {/* Input Area */}
-                    <div className="absolute bottom-0 left-0 right-0 z-30 bg-white border-t border-slate-200 pb-6 pt-4 px-4 shadow-[0_-4px_20px_rgba(0,0,0,0.02)]">
-                        <div className="max-w-3xl mx-auto w-full">
-                            
-                            {/* Suggestions / Actions */}
-                            {(isViewingHistory || pendingStep || isScenarioComplete || (mode === "scenario" && suggestions.length > 0) || (mode === "free" && !isScenarioComplete)) && (
-                                <div className="mb-4">
-                                    {mode === "scenario" && !isScenarioComplete && !pendingStep && suggestions.length > 0 && !isViewingHistory && (
-                                        <div className="mb-4 bg-slate-50 p-3 rounded-xl border border-slate-100">
-                                            <p className="text-xs font-bold text-slate-400 uppercase tracking-wide mb-2 pl-1">Suggestion</p>
-                                            <div className="space-y-2">
-                                                {suggestions.map((sug, idx) => (
-                                                    <DialogueLine key={idx} text={sug} speaker="user" />
-                                                ))}
-                                            </div>
-                                        </div>
-                                    )}
-
-                                    <div className="flex justify-center gap-3">
-                                        {isViewingHistory ? (
-                                            <button onClick={handlePracticeAgain} disabled={chatLoading} className="flex items-center gap-2 bg-blue-600 hover:bg-blue-700 text-white px-5 py-2.5 rounded-full font-bold shadow-md transition">
-                                                <RefreshCw size={18} /> Practice Again
-                                            </button>
-                                        ) : (
-                                            <>
-                                                {pendingStep && (
-                                                    <button onClick={handleContinueScenario} className="flex items-center gap-2 bg-emerald-600 hover:bg-emerald-700 text-white px-6 py-2.5 rounded-full font-bold shadow-md transition">
-                                                        <PlayCircle size={18} /> Continue
-                                                    </button>
-                                                )}
-                                                {(isScenarioComplete || (mode === "free" && !isScenarioComplete)) && (
-                                                    <button onClick={handleGetFinalFeedback} disabled={chatLoading || isAnalyzing} className="flex items-center gap-2 bg-indigo-600 hover:bg-indigo-700 text-white px-6 py-2.5 rounded-full font-bold shadow-md transition disabled:opacity-50">
-                                                        {isAnalyzing ? <Loader2 size={18} className="animate-spin" /> : <Award size={18} />}
-                                                        {isAnalyzing ? "Analyzing..." : "Finish Session"}
-                                                    </button>
-                                                )}
-                                            </>
-                                        )}
+                        {/* Header */}
+                        <header className="h-16 bg-white border-b border-slate-100 px-6 flex items-center justify-between z-20 flex-shrink-0">
+                            <div className="flex items-center gap-4">
+                                {!isSidebarOpen && (
+                                    <button 
+                                        onClick={() => setIsSidebarOpen(true)}
+                                        className="p-2 hover:bg-slate-100 rounded-lg text-slate-500 transition-colors"
+                                    >
+                                        <Menu size={20} />
+                                    </button>
+                                )}
+                                
+                                <div>
+                                    <h4 className="font-bold text-lg text-slate-800 leading-none">
+                                        {activeScenario?.title || selectedTopic || "Conversation"}
+                                    </h4>
+                                    <div className="flex items-center gap-2 mt-1">
+                                        <span className="text-[10px] uppercase font-bold tracking-wider px-1.5 py-0.5 rounded bg-slate-100 text-slate-500">
+                                            {mode}
+                                        </span>
+                                        <span className="text-[10px] uppercase font-bold tracking-wider px-1.5 py-0.5 rounded bg-slate-100 text-slate-500">
+                                            {level}
+                                        </span>
                                     </div>
                                 </div>
-                            )}
+                            </div>
+                            
+                            <button 
+                                onClick={resetConversation}
+                                className="px-4 py-2 bg-slate-100 hover:bg-red-50 text-slate-600 hover:text-red-600 rounded-lg text-sm font-medium transition-colors"
+                            >
+                                Exit
+                            </button>
+                        </header>
 
-                            <ChatInput
-                                mode={mode}
-                                input={input}
-                                onInputChange={setInput}
-                                onSend={handleSend}
-                                loading={chatLoading || !!pendingStep}
-                                onVoiceMessage={handleVoiceMessage}
-                            />
+                        {/* Chat Area */}
+                        <div className="flex-1 overflow-y-auto px-4 py-6 scroll-smooth">
+                            <div className="max-w-3xl mx-auto w-full h-full pb-32">
+                                <ChatArea
+                                    messages={messages}
+                                    loading={chatLoading}
+                                    onSpeak={speak}
+                                />
+                            </div>
+                        </div>
+
+                        {/* Input Area */}
+                        <div className="absolute bottom-0 left-0 right-0 z-30 bg-white border-t border-slate-200 pb-6 pt-4 px-4 shadow-[0_-4px_20px_rgba(0,0,0,0.02)]">
+                            <div className="max-w-3xl mx-auto w-full">
+                                
+                                {/* Suggestions / Actions */}
+                                {(isViewingHistory || pendingStep || isScenarioComplete || (mode === "scenario" && suggestions.length > 0) || (mode === "free" && !isScenarioComplete)) && (
+                                    <div className="mb-4">
+                                        {mode === "scenario" && !isScenarioComplete && !pendingStep && suggestions.length > 0 && !isViewingHistory && (
+                                            <div className="mb-4 bg-slate-50 p-3 rounded-xl border border-slate-100">
+                                                <p className="text-xs font-bold text-slate-400 uppercase tracking-wide mb-2 pl-1">Suggestion</p>
+                                                <div className="space-y-2">
+                                                    {suggestions.map((sug, idx) => (
+                                                        <DialogueLine key={idx} text={sug} speaker="user" />
+                                                    ))}
+                                                </div>
+                                            </div>
+                                        )}
+
+                                        <div className="flex justify-center gap-3">
+                                            {isViewingHistory ? (
+                                                <button onClick={handlePracticeAgain} disabled={chatLoading} className="flex items-center gap-2 bg-blue-600 hover:bg-blue-700 text-white px-5 py-2.5 rounded-full font-bold shadow-md transition">
+                                                    <RefreshCw size={18} /> Practice Again
+                                                </button>
+                                            ) : (
+                                                <>
+                                                    {pendingStep && (
+                                                        <button onClick={handleContinueScenario} className="flex items-center gap-2 bg-emerald-600 hover:bg-emerald-700 text-white px-6 py-2.5 rounded-full font-bold shadow-md transition">
+                                                            <PlayCircle size={18} /> Continue
+                                                        </button>
+                                                    )}
+                                                    {(isScenarioComplete || (mode === "free" && !isScenarioComplete)) && (
+                                                        <button onClick={handleGetFinalFeedback} disabled={chatLoading || isAnalyzing} className="flex items-center gap-2 bg-indigo-600 hover:bg-indigo-700 text-white px-6 py-2.5 rounded-full font-bold shadow-md transition disabled:opacity-50">
+                                                            {isAnalyzing ? <Loader2 size={18} className="animate-spin" /> : <Award size={18} />}
+                                                            {isAnalyzing ? "Analyzing..." : "Finish Session"}
+                                                        </button>
+                                                    )}
+                                                </>
+                                            )}
+                                        </div>
+                                    </div>
+                                )}
+
+                                <ChatInput
+                                    mode={mode}
+                                    input={input}
+                                    onInputChange={setInput}
+                                    onSend={handleSend}
+                                    loading={chatLoading || !!pendingStep}
+                                    onVoiceMessage={handleVoiceMessage}
+                                />
+                            </div>
                         </div>
                     </div>
-                </div>
-            )}
+                )}
             </main>
         </div>
     );
 };
 
-export default ConversationPage; 
+export default ConversationPage;

@@ -70,7 +70,8 @@ export const startConversation = async (
   mode: string,
   level: string,
   scenarioId?: string,
-  topic?: string
+  topic?: string,
+  lessonId?: string | null | undefined
 ) => {
   const res = await fetch(`${API_BASE_URL}/conversation/start`, {
     method: "POST",
@@ -78,7 +79,7 @@ export const startConversation = async (
       "Content-Type": "application/json",
       ...authHeaders(),
     },
-    body: JSON.stringify({ mode, level, scenario_id: scenarioId, topic }),
+    body: JSON.stringify({ mode, level, scenario_id: scenarioId, topic, lesson_id: lessonId }),
   });
   return handleResponse(res);
 };

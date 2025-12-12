@@ -214,6 +214,7 @@ export function RoadmapSection({ userLevel }: RoadmapSectionProps) {
     const handleStartActivity = async (lessonId: string, topicTitle: string, taskType: string, isTitleClick: boolean = false): Promise<void> => {
         const userId = localStorage.getItem("authenticatedUserId");
         const token = localStorage.getItem("access_token"); 
+        console.log("FRONTEND DEBUG: lessonId being sent:", lessonId);
         
         if (!userId || !token) { 
             toast.error("Phiên đăng nhập hết hạn. Vui lòng đăng nhập lại.");
@@ -229,7 +230,7 @@ export function RoadmapSection({ userLevel }: RoadmapSectionProps) {
         if (taskType === 'speaking') {
             const currentLevel = userLevel; 
             toast.success(`Chuyển sang luyện tập Nói Tự do với chủ đề: ${topicTitle}`);
-            router.push(`/conversation?mode=free&level=${currentLevel}&topic=${encodeURIComponent(topicTitle)}`);
+            router.push(`/conversation?mode=free&level=${currentLevel}&topic=${encodeURIComponent(topicTitle)}&lesson_id=${lessonId}`);
             return; // ✅ TRẢ VỀ VOID
         }
         
