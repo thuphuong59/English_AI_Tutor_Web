@@ -1,17 +1,25 @@
-
 import React, { useState, useRef, useEffect } from "react"; 
 import toast from "react-hot-toast";
 
+// --- ĐỊNH NGHĨA KIỂU DỮ LIỆU (TYPESCRIPT) ---
 interface AudioData {
     audioBlob: Blob;
     latency: number; // milliseconds
     duration: number; // seconds
 }
+
 type AnswerValue = string | AudioData | null;
 
+interface Question {
+    id: number;
+    question_type?: string;
+    question_text: string;
+    options: string[];
+}
+
 interface QuestionContentProps {
-    currentQ: any;
-    currentAnswer: AnswerValue; // Chấp nhận string hoặc AudioData
+    currentQ: Question;
+    currentAnswer: AnswerValue;
     setSelectedOptions: React.Dispatch<React.SetStateAction<Record<number, AnswerValue>>>;
     currentQuestion: number;
 }
@@ -23,8 +31,8 @@ export default function QuestionContent({
     currentQuestion,
 }: QuestionContentProps) {
     
-    // --- STATES VÀ REFS CHO THU ÂM ---
-    const [recordingState, setRecordingState] = useState('idle'); 
+    // --- STATES & REFS ---
+    const [recordingState, setRecordingState] = useState<'idle' | 'recording' | 'finished'>('idle'); 
     const [audioUrl, setAudioUrl] = useState<string | null>(null); 
     const [latencyTime, setLatencyTime] = useState<number | null>(null); 
     
@@ -36,56 +44,47 @@ export default function QuestionContent({
     const questionType = currentQ?.question_type || 'grammar';
     const isMultipleChoice = questionType !== 'speaking_prompt';
     
-    // --- FIX 1: RESET STATE VÀ HIỂN THỊ DỮ LIỆU ĐÃ LƯU KHI CHUYỂN CÂU HỎI ---
-    // Khắc phục lỗi trùng lặp câu trả lời
+    // --- RESET STATE WHEN QUESTION CHANGES ---
     useEffect(() => {
-        // Reset các trạng thái cục bộ
         setRecordingState('idle');
         setAudioUrl(null);
         setLatencyTime(null);
         
-        // 🚨 PHÂN TÍCH currentAnswer 🚨
+        // Analyze currentAnswer to restore state if it exists
         if (currentAnswer && typeof currentAnswer === 'object' && 'audioBlob' in currentAnswer) {
-            // Nếu đã có dữ liệu AudioData cho câu hỏi này
             setLatencyTime(currentAnswer.latency);
             setRecordingState('finished');
-            
-            // Tái tạo Blob URL từ Blob đã lưu (cần thiết vì URL.createObjectURL là tạm thời)
             setAudioUrl(URL.createObjectURL(currentAnswer.audioBlob));
         }
         
-        // Dọn dẹp URL Blob cũ khi component unmount hoặc khi ID thay đổi
         return () => {
             if (audioUrl) {
                 URL.revokeObjectURL(audioUrl);
             }
         };
-    }, [currentQ?.id, currentAnswer]); // ✅ Đã sửa lỗi: Dùng optional chaining cho currentQ.id
+    }, [currentQ?.id, currentAnswer]); 
     
-    // Nếu không có câu hỏi hiện tại (ví dụ: đang tải)
     if (!currentQ) {
         return (
             <div className="w-full max-w-2xl bg-white rounded-xl p-8 shadow">
-                <p className="text-gray-500">Đang tải câu hỏi...</p>
+                <p className="text-gray-500">Loading question...</p>
             </div>
         );
     }
     
-    // --- LOGIC THU ÂM ---
+    // --- RECORDING LOGIC ---
     
     const startRecording = async () => {
         if (!navigator.mediaDevices || !window.MediaRecorder) {
-            toast.error("Trình duyệt của bạn không hỗ trợ thu âm.");
+            toast.error("Your browser does not support audio recording.");
             return;
         }
 
-        // 1. Ghi lại thời điểm BẮT ĐẦU PHẢN XẠ (Click)
         clickTimeRef.current = Date.now(); 
 
         try {
             const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
             
-            // 2. Tính Latency (Thời điểm Micro được cấp quyền - Thời điểm Click)
             const actualLatencyMs = Date.now() - clickTimeRef.current;
             
             const recorder = new MediaRecorder(stream);
@@ -103,40 +102,36 @@ export default function QuestionContent({
                 const audioBlob = new Blob(audioChunksRef.current, { type: 'audio/mp3'});
                 const blobUrl = URL.createObjectURL(audioBlob);
                 
-                // Cập nhật local state
                 setAudioUrl(blobUrl);
                 setRecordingState('finished');
-                setLatencyTime(actualLatencyMs); // Lưu latency đã tính
+                setLatencyTime(actualLatencyMs);
 
-                // Dừng stream để tắt đèn micro
                 stream.getTracks().forEach(track => track.stop());
 
-                // 3. LƯU OBJECT AudioData VÀO STATE CHA
                 setSelectedOptions((prev) => ({
                     ...prev,
                     [currentQ.id]: {
                         audioBlob: audioBlob,
                         latency: actualLatencyMs, 
                         duration: finalDuration
-                    } as AudioData, // Ép kiểu
+                    },
                 }));
             };
             
-            // Bắt đầu Ghi âm
             recorder.start();
             setRecordingState('recording');
             
-            // Tự động dừng sau 30 giây
+            // Auto stop after 30s
             setTimeout(() => {
                 if (recorder.state === 'recording') {
                     stopRecording();
-                    toast('Đã hết thời gian. Tự động dừng ghi âm.', { icon: '⏱️' });
+                    toast('Time limit reached. Recording stopped.');
                 }
             }, 30000); 
 
         } catch (err) {
-            console.error("Lỗi truy cập Micro:", err);
-            toast.error("Vui lòng cho phép truy cập micro để làm bài test.");
+            console.error("Microphone access error:", err);
+            toast.error("Please allow microphone access to proceed.");
             setRecordingState('idle');
         }
     };
@@ -147,47 +142,54 @@ export default function QuestionContent({
         }
     };
     
-    // --- RENDER COMPONENT ---
+    // --- RENDER ---
 
     return (
-        <div className="w-full max-w-2xl bg-white rounded-xl p-8 shadow">
+        <div className="w-full max-w-2xl bg-white rounded-xl p-8 shadow-lg border border-gray-100">
             
-            {/* PHẦN TIÊU ĐỀ */}
-            <h2 className="text-xl font-bold mb-6 text-gray-800">
-                <span className="text-teal-600 mr-2">{currentQuestion}.</span>
+            {/* QUESTION TEXT */}
+            <h2 className="text-xl font-bold mb-6 text-gray-900">
+                <span className="text-blue-600 mr-2">{currentQuestion}.</span>
                 {currentQ?.question_text}
             </h2>
             
             {isMultipleChoice ? (
-                // --- TRẮC NGHIỆM ---
+                // --- MULTIPLE CHOICE ---
                 <div className="space-y-4">
-                    {currentQ?.options.map((opt: string, i: number) => {
+                    {currentQ?.options.map((opt, i) => {
                         const optionKey = optionKeys[i]; 
-                        // Kiểm tra nếu currentAnswer là string (trắc nghiệm)
                         const isChecked = typeof currentAnswer === 'string' && currentAnswer === optionKey; 
                         
                         return (
                             <label 
                                 key={optionKey} 
-                                className={`flex items-center gap-3 p-3 rounded-lg cursor-pointer transition-colors border-2
-                                    ${isChecked ? 'border-teal-600 bg-teal-50 shadow-md' : 'border-gray-300 hover:border-teal-400'}
+                                className={`flex items-center gap-4 p-4 rounded-xl cursor-pointer transition-all border-2
+                                    ${isChecked 
+                                        ? 'border-blue-600 bg-blue-50 shadow-md' 
+                                        : 'border-gray-200 hover:border-blue-400 hover:bg-gray-50'}
                                 `}
                                 onClick={() =>
                                     setSelectedOptions((prev) => ({
                                         ...prev,
-                                        [currentQ.id]: optionKey, // Lưu string key
+                                        [currentQ.id]: optionKey,
                                     }))
                                 }
                             >
+                                <div className={`w-6 h-6 rounded-full border-2 flex items-center justify-center shrink-0 transition-colors
+                                    ${isChecked ? 'border-blue-600 bg-blue-600' : 'border-gray-300'}
+                                `}>
+                                    {isChecked && <div className="w-2.5 h-2.5 bg-white rounded-full" />}
+                                </div>
+                                
                                 <input
                                     type="radio"
                                     name={`question-${currentQ.id}`}
                                     value={optionKey}
                                     checked={isChecked}
                                     onChange={() => {}}
-                                    className="appearance-none w-5 h-5 rounded-full border-2 border-teal-500 checked:bg-teal-600 checked:border-teal-600 focus:ring-2 focus:ring-teal-500 shrink-0"
+                                    className="hidden" // Hide default radio
                                 />
-                                <span className="text-gray-800 font-medium">
+                                <span className={`font-medium text-lg ${isChecked ? 'text-blue-900' : 'text-gray-700'}`}>
                                     {optionKey}. {opt}
                                 </span>
                             </label>
@@ -195,50 +197,53 @@ export default function QuestionContent({
                     })}
                 </div>
             ) : (
-                // --- PHẦN GIAO TIẾP/PHÁT ÂM (Speaking Prompt) ---
-                <div className="p-6 bg-yellow-50 border-l-4 border-yellow-500 rounded-md">
-                    <p className="font-bold text-lg text-yellow-700 mb-3">
-                        💬 Hướng dẫn Luyện Nói:
+                // --- SPEAKING PROMPT ---
+                <div className="p-6 bg-blue-50 border-l-4 border-blue-600 rounded-r-xl">
+                    <p className="font-bold text-lg text-blue-900 mb-2">
+                        Speaking Instructions
                     </p>
-                    <p className="text-gray-700 mb-4">
-                        Hãy trả lời câu hỏi/tình huống trên bằng giọng nói. (Giới hạn 30 giây).
+                    <p className="text-blue-800 mb-6 opacity-90">
+                        Please answer the question or situation above using your voice. (Limit: 30 seconds).
                     </p>
                     
-                    <div className="h-20 flex flex-col items-center justify-center rounded-md">
+                    <div className="h-24 flex flex-col items-center justify-center rounded-lg bg-white/50 border border-blue-100 p-4">
                         
-                        {/* 1. IDLE / SẴN SÀNG */}
+                        {/* 1. IDLE */}
                         {recordingState === 'idle' && (
                             <button
                                 onClick={startRecording}
-                                className="bg-teal-600 text-white px-6 py-3 rounded-full font-bold shadow-lg hover:bg-teal-700 transition disabled:bg-gray-400"
+                                className="bg-blue-600 text-white px-8 py-3 rounded-full font-bold shadow-lg hover:bg-blue-700 transition active:scale-95 disabled:bg-gray-400 disabled:cursor-not-allowed"
                             >
-                                🎙️ BẮT ĐẦU THU ÂM
+                                Start Recording
                             </button>
                         )}
 
-                        {/* 2. ĐANG GHI ÂM */}
+                        {/* 2. RECORDING */}
                         {recordingState === 'recording' && (
-                            <div className="flex flex-col items-center">
-                                <div className="flex items-center space-x-2">
-                                    <div className="w-4 h-4 bg-red-600 rounded-full animate-pulse"></div>
-                                    <p className="text-red-600 font-semibold">ĐANG GHI ÂM...</p>
+                            <div className="flex flex-col items-center w-full">
+                                <div className="flex items-center space-x-3 mb-3">
+                                    <span className="relative flex h-3 w-3">
+                                      <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-red-400 opacity-75"></span>
+                                      <span className="relative inline-flex rounded-full h-3 w-3 bg-red-500"></span>
+                                    </span>
+                                    <p className="text-red-600 font-bold tracking-wider text-sm">RECORDING...</p>
                                 </div>
                                 <button
                                     onClick={stopRecording}
-                                    className="mt-2 bg-red-500 text-white px-4 py-1 rounded hover:bg-red-600 transition font-semibold"
+                                    className="text-gray-500 hover:text-red-600 text-sm font-semibold underline decoration-2 underline-offset-4 transition-colors"
                                 >
-                                    Dừng Lại
+                                    Stop Recording
                                 </button>
                             </div>
                         )}
 
-                        {/* 3. ĐÃ HOÀN THÀNH */}
+                        {/* 3. FINISHED */}
                         {recordingState === 'finished' && audioUrl && (
-                            <div className="text-center">
-                                <p className="text-teal-600 font-bold mb-2">✅ Đã Ghi Âm Thành Công!</p>
-                                <audio controls src={audioUrl} className="w-full h-8"></audio> 
-                                <p className="text-sm text-gray-500 mt-2">
-                                    Phản xạ: {latencyTime ? (latencyTime / 1000).toFixed(2) + 's' : 'N/A'}
+                            <div className="w-full flex flex-col items-center">
+                                <p className="text-green-600 font-bold mb-2 text-sm">Recording Saved</p>
+                                <audio controls src={audioUrl} className="w-full max-w-xs h-8 mb-1" /> 
+                                <p className="text-xs text-gray-400 mt-1 font-mono">
+                                    Latency: {latencyTime ? (latencyTime / 1000).toFixed(3) + 's' : 'N/A'}
                                 </p>
                             </div>
                         )}

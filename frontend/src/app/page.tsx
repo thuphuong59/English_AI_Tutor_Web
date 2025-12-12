@@ -1,248 +1,412 @@
-import Image from "next/image";
-import Link from "next/link";
+"use client";
+import { useState, useEffect } from "react";
+import { MessageCircle, Mic, Brain, Sparkles, TrendingUp, Clock, ShieldCheck, Zap, Star, Activity, ArrowRight, Layers, Target, BarChart3 } from "lucide-react";
+
 export default function HomePage() {
+  // Animation state for the chat demo
+  // 0: AI asks, 1: User answers, 2: AI Corrects + Scores
+  const [activeMessage, setActiveMessage] = useState(0);
+
+  useEffect(() => {
+    const interval = setInterval(() => {
+      setActiveMessage((prev) => (prev + 1) % 3);
+    }, 4000); // Tăng thời gian lên chút để người dùng kịp đọc điểm số
+    return () => clearInterval(interval);
+  }, []);
+
   return (
-    <main className="flex min-h-screen flex-col bg-gradient-to-br from-[#F9F4EF] via-[#F4FFFB] to-[#E6ECFF]">
-      {/* Hero Section với animated background */}
-      <section className="relative flex flex-1 flex-col items-center justify-center text-center px-6 py-20 overflow-hidden">
+    <main className="flex min-h-screen flex-col bg-gradient-to-br from-[#F9F4EF] via-[#F4FFFB] to-[#E6ECFF] overflow-x-hidden">
+      
+      {/* --- HERO SECTION --- */}
+      <section className="relative flex flex-col items-center justify-center text-center px-6 py-20 lg:py-32 overflow-hidden">
         {/* Animated Background Elements */}
-        <div className="absolute inset-0 overflow-hidden">
+        <div className="absolute inset-0 overflow-hidden pointer-events-none">
           <div className="absolute top-20 left-10 w-72 h-72 bg-gradient-to-r from-emerald-400/20 to-teal-400/20 rounded-full blur-3xl animate-pulse"></div>
           <div className="absolute bottom-20 right-10 w-96 h-96 bg-gradient-to-r from-blue-400/20 to-purple-400/20 rounded-full blur-3xl animate-pulse delay-1000"></div>
           <div className="absolute top-40 right-1/4 w-64 h-64 bg-gradient-to-r from-yellow-400/20 to-orange-400/20 rounded-full blur-3xl animate-pulse delay-2000"></div>
         </div>
 
         {/* Content */}
-        <div className="relative z-10">
-          <div className="inline-flex items-center px-4 py-2 bg-white/80 backdrop-blur-sm rounded-full border border-emerald-200 mb-8 shadow-lg">
-            <span className="text-emerald-600 font-medium">🚀 AI-Powered Learning</span>
+        <div className="relative z-10 max-w-5xl mx-auto">
+          <div className="inline-flex items-center px-4 py-2 bg-white/80 backdrop-blur-sm rounded-full border border-emerald-200 mb-8 shadow-lg animate-fade-in-up">
+            <Sparkles className="w-5 h-5 text-emerald-500 mr-2" />
+            <span className="text-emerald-700 font-medium">Next-Gen AI Personalization</span>
           </div>
 
-          <h1 className="text-6xl md:text-7xl lg:text-8xl font-black mb-6">
+          <h1 className="text-6xl md:text-7xl lg:text-8xl font-black mb-6 tracking-tight">
             <span className="bg-gradient-to-r from-[#98F5E1] via-[#6B63FF] to-[#B9B4FF] bg-clip-text text-transparent">
               Master English 
             </span>
-            <span className="bg-gradient-to-r from-blue-600 via-purple-600 to-emerald-500 bg-clip-text text-transparent leading-tight block">
+            <br />
+            <span className="bg-gradient-to-r from-blue-600 via-purple-600 to-emerald-500 bg-clip-text text-transparent leading-tight block pb-2">
               Like Never Before
             </span>
           </h1>
 
-          <p className="mt-8 text-xl md:text-2xl text-gray-700 max-w-4xl font-light leading-relaxed">
-            Experience language learning with AI that adapts to your pace,
-            <br className="hidden md:block" />
-            corrects your pronunciation, and makes every conversation count.
+          <p className="mt-8 text-xl md:text-2xl text-gray-600 max-w-3xl mx-auto font-light leading-relaxed">
+            Stop memorizing blindly. Experience <span className="font-semibold text-emerald-600">Spaced Repetition</span>, 
+            engage in <span className="font-semibold text-[#0067c5]">Smart AI Conversations</span>, and follow a path 
+            <span className="font-semibold text-blue-600"> Personalized</span> just for you.
           </p>
 
           <div className="mt-12 flex flex-col sm:flex-row gap-6 justify-center items-center">
-            <button className="group px-10 py-4 bg-gradient-to-r from-emerald-500 to-teal-600 text-white font-bold rounded-2xl shadow-2xl hover:shadow-emerald-500/25 hover:scale-105 transition-all duration-300 transform">
+            {/* NÚT START LEARNING NOW - Chuyển đến trang Test */}
+            <button 
+              onClick={() => window.location.href = '/test'}
+              className="group px-10 py-4 bg-gradient-to-r from-emerald-500 to-teal-600 text-white font-bold rounded-2xl shadow-2xl hover:shadow-emerald-500/25 hover:scale-105 transition-all duration-300 transform"
+            >
               <span className="flex items-center gap-3">
-                🚀 Start Learning Now
-                <svg className="w-5 h-5 group-hover:translate-x-1 transition-transform" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 7l5 5m0 0l-5 5m5-5H6" />
-                </svg>
+                 Start Learning Now
+                <TrendingUp className="w-5 h-5 group-hover:translate-x-1 transition-transform" />
               </span>
             </button>
-            <button className="group px-10 py-4 bg-white/90 backdrop-blur-sm text-gray-700 font-bold border-2 border-gray-200 rounded-2xl shadow-xl hover:shadow-2xl hover:scale-105 hover:border-emerald-300 transition-all duration-300">
+            
+            {/* NÚT TRY VOICE DEMO - Chuyển đến trang Conversation */}
+            <button 
+              onClick={() => window.location.href = '/conversation'}
+              className="group px-10 py-4 bg-white/80 backdrop-blur-md text-gray-700 font-bold border-2 border-white/50 rounded-2xl shadow-xl hover:shadow-2xl hover:scale-105 transition-all duration-300"
+            >
               <span className="flex items-center gap-3">
                 🎧 Try Voice Demo
-                <svg className="w-5 h-5 group-hover:scale-110 transition-transform" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M14.828 14.828a4 4 0 01-5.656 0M9 10h1a3 3 0 000-6h-1m4.64 0a3 3 0 000 6M15 7a3 3 0 11-6 0 3 3 0 016 0z" />
-                </svg>
+                <Mic className="w-5 h-5 group-hover:scale-110 transition-transform text-emerald-500" />
               </span>
             </button>
           </div>
-
-          {/* Hero Illustration với glassmorphism */}
-          <div className="mt-16 relative">
-            <div className="absolute inset-0 bg-gradient-to-t from-white/20 to-transparent rounded-3xl blur-xl"></div>
-            <Image
-              src="/learning.svg"
-              alt="AI English Tutor"
-              width={700}
-              height={500}
-              className="relative w-full max-w-4xl drop-shadow-2xl"
-            />
-          </div>
         </div>
       </section>
 
-      {/* Features Section với modern cards */}
-      <section className="py-24 bg-white/50 backdrop-blur-sm">
+      {/* --- FEATURE 1: SMART AI CONVERSATION (CHAT UI + SCORING) - BLUE THEME --- */}
+      <section className="py-24 relative">
         <div className="max-w-7xl mx-auto px-6">
-          <div className="text-center mb-20">
-            <div className="inline-flex items-center px-4 py-2 bg-gradient-to-r from-emerald-100 to-teal-100 rounded-full mb-6">
-              <span className="text-emerald-700 font-semibold">✨ Premium Features</span>
+          <div className="grid lg:grid-cols-2 gap-16 items-center">
+            {/* Text Content */}
+            <div className="order-2 lg:order-1">
+              <div className="inline-flex items-center gap-2 px-3 py-1 bg-[#0067c5]/10 text-[#0067c5] rounded-full text-sm font-semibold mb-6">
+                <MessageCircle className="w-4 h-4" /> Smart Grading & Chat
+              </div>
+              <h2 className="text-4xl md:text-5xl font-bold text-gray-900 mb-6">
+                Talk Freely. <br/>
+                <span className="text-[#0067c5]">Get Scored Instantly.</span>
+              </h2>
+              <p className="text-lg text-gray-600 mb-8 leading-relaxed">
+                Our AI doesn't just listen; it evaluates. Speak naturally and get immediate scores on your pronunciation and grammar, along with helpful corrections.
+              </p>
+              
+              <ul className="space-y-4">
+                {[
+                  "Real-time Pronunciation Score (0-100)",
+                  "Grammar Accuracy Rating",
+                  "Context-aware corrections"
+                ].map((item, i) => (
+                  <li key={i} className="flex items-center text-gray-700 bg-white/50 p-3 rounded-xl border border-[#0067c5]/20">
+                    <ShieldCheck className="w-6 h-6 text-[#0067c5] mr-3 flex-shrink-0" />
+                    {item}
+                  </li>
+                ))}
+              </ul>
             </div>
-            <h2 className="text-5xl md:text-6xl font-black text-gray-900 mb-6">
-              Everything You Need to
-              <span className="bg-gradient-to-r from-emerald-500 to-teal-600 bg-clip-text text-transparent block">
-                Excel in English
-              </span>
-            </h2>
-            <p className="text-xl text-gray-600 max-w-3xl mx-auto">
-              Our AI-powered platform combines cutting-edge technology with proven learning methods
-            </p>
-          </div>
 
-          <div className="grid lg:grid-cols-3 gap-8">
-            {/* Pronunciation Card */}
-            <Link href="/pronunciation" className="group block">
-              <div className="relative p-8 bg-gradient-to-br from-emerald-50 to-green-100 rounded-3xl shadow-xl hover:shadow-2xl transition-all duration-500 transform hover:-translate-y-2 border border-emerald-200/50">
-                <div className="absolute top-6 right-6 w-12 h-12 bg-emerald-500 rounded-2xl flex items-center justify-center text-2xl group-hover:scale-110 transition-transform">
-                  🎤
+            {/* Interactive Demo UI - CHAT BUBBLES WITH SCORES */}
+            <div className="order-1 lg:order-2 relative">
+              <div className="absolute inset-0 bg-[#0067c5]/10 blur-3xl rounded-full"></div>
+              <div className="relative bg-white border border-[#0067c5]/20 rounded-3xl shadow-2xl p-6 md:p-8 max-w-md mx-auto">
+                <div className="flex items-center justify-between border-b border-gray-100 pb-4 mb-4">
+                  <div className="flex items-center gap-3">
+                    <div className="w-10 h-10 bg-gradient-to-tr from-[#0067c5] to-cyan-500 rounded-full flex items-center justify-center text-white">
+                      <Brain className="w-6 h-6" />
+                    </div>
+                    <div>
+                      <h4 className="font-bold text-gray-900">AI Tutor</h4>
+                      <p className="text-xs text-green-500 flex items-center gap-1">● Online</p>
+                    </div>
+                  </div>
+                  <div className="bg-[#0067c5]/10 px-3 py-1 rounded-full text-xs font-bold text-[#0067c5]">
+                    Voice Mode
+                  </div>
                 </div>
-                <div className="mb-6">
-                  <h3 className="text-2xl font-bold text-emerald-800 mb-4">Perfect Pronunciation</h3>
-                  <p className="text-emerald-700 leading-relaxed">
-                    Real-time AI feedback analyzes your speech patterns and guides you to native-level pronunciation
-                  </p>
+
+                <div className="space-y-4 mb-6 h-[320px] overflow-hidden relative flex flex-col justify-end">
+                  {/* Message 1: AI Question */}
+                  <div className={`transition-all duration-500 transform ${activeMessage >= 0 ? 'opacity-100 translate-y-0' : 'opacity-0 translate-y-4'}`}>
+                    <div className="bg-gray-100 text-gray-800 p-4 rounded-2xl rounded-tl-none inline-block max-w-[85%] text-sm">
+                      Hello! How was your weekend?
+                    </div>
+                  </div>
+
+                  {/* Message 2: User Answer */}
+                  <div className={`flex justify-end transition-all duration-500 delay-100 transform ${activeMessage >= 1 ? 'opacity-100 translate-y-0' : 'opacity-0 translate-y-4'}`}>
+                    <div className="bg-[#0067c5] text-white p-4 rounded-2xl rounded-tr-none inline-block max-w-[85%] text-sm">
+                      I go to the beach with friends.
+                    </div>
+                  </div>
+
+                  {/* Message 3: AI Analysis & Score */}
+                  <div className={`transition-all duration-500 delay-300 transform ${activeMessage >= 2 ? 'opacity-100 translate-y-0' : 'opacity-0 translate-y-4'}`}>
+                    <div className="bg-white border-2 border-[#0067c5]/20 p-0 rounded-2xl rounded-tl-none inline-block max-w-[95%] text-sm shadow-lg overflow-hidden">
+                      {/* Score Header */}
+                      <div className="bg-[#0067c5]/5 p-3 flex gap-3 border-b border-[#0067c5]/10">
+                        <div className="flex items-center gap-1 bg-white px-2 py-1 rounded-lg border border-gray-200 shadow-sm">
+                            <Activity className="w-3 h-3 text-emerald-500" />
+                            <span className="text-xs font-bold text-gray-700">Pronun: <span className="text-emerald-600">92%</span></span>
+                        </div>
+                        <div className="flex items-center gap-1 bg-white px-2 py-1 rounded-lg border border-gray-200 shadow-sm">
+                            <Star className="w-3 h-3 text-orange-500" />
+                            <span className="text-xs font-bold text-gray-700">Grammar: <span className="text-orange-600">7/10</span></span>
+                        </div>
+                      </div>
+                      
+                      {/* Correction Content */}
+                      <div className="p-3 text-gray-700">
+                        <div className="font-bold text-xs mb-1 text-[#0067c5] uppercase flex items-center gap-1">
+                          <Zap className="w-3 h-3" /> Correction
+                        </div>
+                        "I <span className="line-through opacity-50 text-red-500">go</span> <strong className="text-emerald-600">went</strong> to the beach..."
+                        <br/>
+                        <span className="text-xs opacity-80 mt-2 block italic">Tip: Use past tense for finished actions.</span>
+                      </div>
+                    </div>
+                  </div>
                 </div>
-                <div className="flex items-center text-emerald-600 font-semibold group-hover:gap-3 transition-all">
-                  <span>Start practicing</span>
-                  <svg className="w-5 h-5 ml-2 group-hover:translate-x-1 transition-transform" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 7l5 5m0 0l-5 5m5-5H6" />
-                  </svg>
+
+                <div className="relative">
+                  <div className="h-12 bg-gray-50 rounded-full border border-gray-200 flex items-center px-4 justify-between text-gray-400">
+                    <span>Listening...</span>
+                    <div className="w-8 h-8 bg-[#0067c5] rounded-full flex items-center justify-center text-white shadow-lg cursor-pointer hover:bg-[#005bb5] transition animate-pulse">
+                      <Mic className="w-4 h-4" />
+                    </div>
+                  </div>
                 </div>
               </div>
-            </Link>
-
-            {/* Conversation Card */}
-            <Link href="/conversation" className="group block">
-              <div className="relative p-8 bg-gradient-to-br from-teal-50 to-cyan-100 rounded-3xl shadow-xl hover:shadow-2xl transition-all duration-500 transform hover:-translate-y-2 border border-teal-200/50">
-                <div className="absolute top-6 right-6 w-12 h-12 bg-teal-500 rounded-2xl flex items-center justify-center text-2xl group-hover:scale-110 transition-transform">
-                  💬
-                </div>
-                <div className="mb-6">
-                  <h3 className="text-2xl font-bold text-teal-800 mb-4">Smart Conversations</h3>
-                  <p className="text-teal-700 leading-relaxed">
-                    Engage in realistic dialogues with AI that adapts to your skill level and interests
-
-
-                    
-                  </p>
-                </div>
-                <div className="flex items-center text-teal-600 font-semibold group-hover:gap-3 transition-all">
-                  <span>Start chatting</span>
-                  <svg className="w-5 h-5 ml-2 group-hover:translate-x-1 transition-transform" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 7l5 5m0 0l-5 5m5-5H6" />
-                  </svg>
-                </div>
-              </div>
-            </Link>
-
-            {/* Vocabulary Card */}
-            <Link href="/vocabulary" className="group block">
-              <div className="relative p-8 bg-gradient-to-br from-yellow-50 to-amber-100 rounded-3xl shadow-xl hover:shadow-2xl transition-all duration-500 transform hover:-translate-y-2 border border-yellow-200/50">
-                <div className="absolute top-6 right-6 w-12 h-12 bg-yellow-500 rounded-2xl flex items-center justify-center text-2xl group-hover:scale-110 transition-transform">
-                  📚
-                </div>
-                <div className="mb-6">
-                  <h3 className="text-2xl font-bold text-yellow-800 mb-4">Dynamic Vocabulary</h3>
-                  <p className="text-yellow-700 leading-relaxed">
-                    Learn words that matter with spaced repetition and contextual examples
-                  </p>
-                </div>
-                <div className="flex items-center text-yellow-600 font-semibold group-hover:gap-3 transition-all">
-                  <span>Expand vocabulary</span>
-                  <svg className="w-5 h-5 ml-2 group-hover:translate-x-1 transition-transform" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 7l5 5m0 0l-5 5m5-5H6" />
-                  </svg>
-                </div>
-              </div>
-            </Link>
+            </div>
           </div>
         </div>
       </section>
 
-      {/* Footer với dark mode và glassmorphism */}
-      <footer className="relative bg-gradient-to-b from-gray-900 via-slate-900 to-black overflow-hidden">
+      {/* --- FEATURE 2: SPACED REPETITION (Học ngắt quãng) --- */}
+      <section className="py-24 bg-white/60 backdrop-blur-lg">
+        <div className="max-w-7xl mx-auto px-6">
+          <div className="grid lg:grid-cols-2 gap-16 items-center">
+            {/* Graphic/Visual */}
+            <div className="relative">
+              <div className="absolute -inset-4 bg-gradient-to-r from-emerald-100 to-teal-50 rounded-[40px] transform rotate-3 opacity-50"></div>
+              <div className="bg-white border border-emerald-100 rounded-[30px] p-8 shadow-xl relative z-10">
+                <div className="flex items-center justify-between mb-8">
+                  <h3 className="font-bold text-lg text-gray-800">Memory Retention Curve</h3>
+                  <div className="flex gap-2">
+                    <span className="w-3 h-3 rounded-full bg-gray-300"></span>
+                    <span className="w-3 h-3 rounded-full bg-emerald-500"></span>
+                  </div>
+                </div>
+                
+                {/* Simplified Chart CSS Representation */}
+                <div className="relative h-48 border-l border-b border-gray-200 w-full flex items-end">
+                  {/* Dashed line (Forget curve) */}
+                  <svg className="absolute inset-0 h-full w-full pointer-events-none" preserveAspectRatio="none">
+                     <path d="M0,20 Q100,180 300,190" fill="none" stroke="#e5e7eb" strokeWidth="3" strokeDasharray="5,5" />
+                     {/* Spaced Repetition Curve (The jagged line going up) */}
+                     <path d="M0,20 Q40,100 50,120 L50,30 Q90,100 100,110 L100,25 Q180,90 200,100 L200,20 Q350,40 400,50" 
+                           fill="none" stroke="#10b981" strokeWidth="4" className="drop-shadow-lg" />
+                  </svg>
+                  
+                  {/* Points */}
+                  <div className="absolute left-[12%] bottom-[35%] bg-white border-2 border-emerald-500 w-8 h-8 rounded-full flex items-center justify-center shadow-lg text-[10px] font-bold text-emerald-600 z-10">1d</div>
+                  <div className="absolute left-[25%] bottom-[45%] bg-white border-2 border-emerald-500 w-8 h-8 rounded-full flex items-center justify-center shadow-lg text-[10px] font-bold text-emerald-600 z-10">3d</div>
+                  <div className="absolute left-[50%] bottom-[65%] bg-white border-2 border-emerald-500 w-8 h-8 rounded-full flex items-center justify-center shadow-lg text-[10px] font-bold text-emerald-600 z-10">1w</div>
+                </div>
+                
+                <div className="mt-4 flex justify-between text-xs text-gray-500 font-medium">
+                  <span>First Learning</span>
+                  <span>Long-term Memory</span>
+                </div>
+              </div>
+            </div>
+
+            {/* Text Content */}
+            <div>
+              <div className="inline-flex items-center gap-2 px-3 py-1 bg-emerald-100 text-emerald-700 rounded-full text-sm font-semibold mb-6">
+                <Clock className="w-4 h-4" /> Spaced Repetition System
+              </div>
+              <h2 className="text-4xl md:text-5xl font-bold text-gray-900 mb-6">
+                Never Forget <br/>
+                <span className="text-emerald-500">What You Learn.</span>
+              </h2>
+              <p className="text-lg text-gray-600 mb-6 leading-relaxed">
+                Why study hard when you can study smart? Our algorithm tracks every word you learn and calculates the exact moment you're about to forget it.
+              </p>
+              <div className="bg-emerald-50 p-6 rounded-2xl border border-emerald-100">
+                <h4 className="font-bold text-emerald-800 mb-2 flex items-center gap-2">
+                  <TrendingUp className="w-5 h-5" /> Efficiency Boost
+                </h4>
+                <p className="text-emerald-700 text-sm">
+                  Students using Spaced Repetition learn vocabulary <span className="font-bold">3x faster</span> than traditional rote memorization methods.
+                </p>
+              </div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      {/* --- FEATURE 3: PERSONALIZATION (Cá nhân hóa) - BLUE THEME #0067c5 --- */}
+      <section className="py-24 relative overflow-hidden">
+        {/* Decorative blobs */}
+        <div className="absolute top-0 right-0 w-[500px] h-[500px] bg-[#0067c5]/5 rounded-full blur-3xl -z-10"></div>
+        <div className="absolute bottom-0 left-0 w-[500px] h-[500px] bg-cyan-100/50 rounded-full blur-3xl -z-10"></div>
+
+        <div className="max-w-7xl mx-auto px-6 text-center mb-16">
+           <h2 className="text-4xl md:text-5xl font-black text-gray-900 mb-6">
+              Your Journey, <span className="bg-gradient-to-r from-[#0067c5] to-cyan-500 bg-clip-text text-transparent">Uniquely Yours</span>
+           </h2>
+           <p className="text-xl text-gray-600 max-w-2xl mx-auto">
+             No two learners are alike. We build a dynamic curriculum based on your goals, interests, and real-time performance.
+           </p>
+        </div>
+
+        <div className="max-w-6xl mx-auto px-6 grid md:grid-cols-3 gap-8">
+          {/* Personalization Card 1 */}
+          <div className="group bg-white backdrop-blur rounded-3xl p-8 border border-white shadow-xl hover:-translate-y-2 transition-transform duration-300 relative overflow-hidden">
+             <div className="absolute top-0 right-0 w-24 h-24 bg-[#0067c5]/5 rounded-bl-full -mr-4 -mt-4 transition-all group-hover:scale-110"></div>
+             <div className="w-14 h-14 bg-[#0067c5]/10 rounded-2xl flex items-center justify-center text-[#0067c5] mb-6">
+                <Target className="w-7 h-7" />
+             </div>
+             <h3 className="text-xl font-bold text-gray-900 mb-3 group-hover:text-[#0067c5] transition-colors">Goal-Driven Content</h3>
+             <p className="text-gray-600">
+               Whether it's for <span className="text-[#0067c5] font-semibold">Travel</span>, <span className="text-[#0067c5] font-semibold">Business</span>, or <span className="text-[#0067c5] font-semibold">IELTS</span>, lessons adapt to your specific target.
+             </p>
+          </div>
+
+          {/* Personalization Card 2 */}
+          <div className="bg-gradient-to-br from-[#0067c5] to-cyan-600 text-white rounded-3xl p-8 shadow-2xl transform md:-translate-y-6 relative overflow-hidden">
+             <div className="absolute -bottom-10 -right-10 w-40 h-40 bg-white/10 rounded-full blur-2xl"></div>
+             <div className="w-14 h-14 bg-white/20 rounded-2xl flex items-center justify-center text-white mb-6 backdrop-blur-sm">
+               <Brain className="w-8 h-8" />
+             </div>
+             <h3 className="text-xl font-bold mb-3">Adaptive Difficulty</h3>
+             <p className="text-blue-50">
+               Too easy? We speed up. Too hard? We slow down. The AI constantly calibrates to keep you in the "Flow State".
+             </p>
+          </div>
+
+          {/* Personalization Card 3 */}
+          <div className="group bg-white backdrop-blur rounded-3xl p-8 border border-white shadow-xl hover:-translate-y-2 transition-transform duration-300 relative overflow-hidden">
+             <div className="absolute top-0 right-0 w-24 h-24 bg-[#0067c5]/5 rounded-bl-full -mr-4 -mt-4 transition-all group-hover:scale-110"></div>
+             <div className="w-14 h-14 bg-[#0067c5]/10 rounded-2xl flex items-center justify-center text-[#0067c5] mb-6">
+                <BarChart3 className="w-7 h-7" />
+             </div>
+             <h3 className="text-xl font-bold text-gray-900 mb-3 group-hover:text-[#0067c5] transition-colors">Weakness Targeting</h3>
+             <p className="text-gray-600">
+               We identify struggling areas and subtly weave them into future lessons until you master them completely.
+             </p>
+          </div>
+        </div>
+      </section>
+
+      {/* --- CORE MODULES (UPDATED DESIGN) --- */}
+      <section className="py-20 bg-gradient-to-b from-white/50 to-white/80 backdrop-blur-sm border-t border-gray-100">
+        <div className="max-w-7xl mx-auto px-6">
+          <div className="text-center mb-16">
+             <div className="inline-flex items-center gap-2 px-3 py-1 bg-gray-100 text-gray-600 rounded-full text-sm font-semibold mb-4">
+                <Layers className="w-4 h-4" /> Comprehensive Learning
+              </div>
+            <h2 className="text-4xl font-bold text-gray-900">Core Modules</h2>
+          </div>
+          
+          <div className="grid lg:grid-cols-3 gap-8">
+            {/* Module 1 */}
+            <a href="/pronunciation" className="group relative bg-white p-8 rounded-3xl shadow-lg hover:shadow-2xl transition-all duration-300 hover:-translate-y-2 border border-gray-100 overflow-hidden">
+              <div className="absolute top-0 right-0 w-32 h-32 bg-emerald-50 rounded-full -mr-16 -mt-16 transition-transform group-hover:scale-150"></div>
+              <div className="relative z-10">
+                 <div className="w-14 h-14 bg-emerald-100 rounded-2xl flex items-center justify-center text-3xl mb-6 text-emerald-600 shadow-sm group-hover:scale-110 transition-transform">
+                    <Mic className="w-7 h-7" />
+                 </div>
+                 <h3 className="text-2xl font-bold text-gray-900 mb-3 group-hover:text-emerald-600 transition-colors">Perfect Pronunciation</h3>
+                 <p className="text-gray-500 mb-8 leading-relaxed">Visual feedback on your intonation and accent to sound like a native.</p>
+                 <span className="flex items-center text-emerald-600 font-bold group-hover:gap-2 transition-all">
+                    Start Practice <ArrowRight className="w-4 h-4 ml-2"/>
+                 </span>
+              </div>
+            </a>
+
+            {/* Module 2 */}
+            <a href="/conversation" className="group relative bg-white p-8 rounded-3xl shadow-lg hover:shadow-2xl transition-all duration-300 hover:-translate-y-2 border border-gray-100 overflow-hidden">
+              <div className="absolute top-0 right-0 w-32 h-32 bg-[#0067c5]/10 rounded-full -mr-16 -mt-16 transition-transform group-hover:scale-150"></div>
+              <div className="relative z-10">
+                 <div className="w-14 h-14 bg-[#0067c5]/10 rounded-2xl flex items-center justify-center text-3xl mb-6 text-[#0067c5] shadow-sm group-hover:scale-110 transition-transform">
+                    <MessageCircle className="w-7 h-7" />
+                 </div>
+                 <h3 className="text-2xl font-bold text-gray-900 mb-3 group-hover:text-[#0067c5] transition-colors">Fluid Conversation</h3>
+                 <p className="text-gray-500 mb-8 leading-relaxed">Practice speaking confidently without the fear of judgment anytime.</p>
+                 <span className="flex items-center text-[#0067c5] font-bold group-hover:gap-2 transition-all">
+                    Start Chatting <ArrowRight className="w-4 h-4 ml-2"/>
+                 </span>
+              </div>
+            </a>
+
+            {/* Module 3 */}
+            <a href="/vocabulary" className="group relative bg-white p-8 rounded-3xl shadow-lg hover:shadow-2xl transition-all duration-300 hover:-translate-y-2 border border-gray-100 overflow-hidden">
+              <div className="absolute top-0 right-0 w-32 h-32 bg-amber-50 rounded-full -mr-16 -mt-16 transition-transform group-hover:scale-150"></div>
+              <div className="relative z-10">
+                 <div className="w-14 h-14 bg-amber-100 rounded-2xl flex items-center justify-center text-3xl mb-6 text-amber-600 shadow-sm group-hover:scale-110 transition-transform">
+                    <Brain className="w-7 h-7" />
+                 </div>
+                 <h3 className="text-2xl font-bold text-gray-900 mb-3 group-hover:text-amber-600 transition-colors">Dynamic Vocabulary</h3>
+                 <p className="text-gray-500 mb-8 leading-relaxed">Master new words learned in context, not in isolation.</p>
+                 <span className="flex items-center text-amber-600 font-bold group-hover:gap-2 transition-all">
+                    Start Learning <ArrowRight className="w-4 h-4 ml-2"/>
+                 </span>
+              </div>
+            </a>
+          </div>
+        </div>
+      </section>
+
+      {/* --- FOOTER --- */}
+      <footer className="relative bg-gradient-to-b from-gray-900 via-slate-900 to-black overflow-hidden text-white">
         {/* Background Elements */}
-        <div className="absolute inset-0">
+        <div className="absolute inset-0 pointer-events-none">
           <div className="absolute top-0 left-1/4 w-96 h-96 bg-emerald-500/10 rounded-full blur-3xl"></div>
           <div className="absolute bottom-0 right-1/4 w-96 h-96 bg-blue-500/10 rounded-full blur-3xl"></div>
         </div>
 
         <div className="relative z-10 max-w-7xl mx-auto px-6 py-16">
           <div className="grid lg:grid-cols-4 gap-12 mb-16">
-            {/* Brand Section */}
             <div className="lg:col-span-2">
               <div className="flex items-center mb-6">
                 <div className="w-12 h-12 bg-gradient-to-r from-emerald-500 to-teal-600 rounded-2xl flex items-center justify-center mr-4 shadow-lg">
                   <span className="text-white font-bold text-xl">E</span>
                 </div>
-                <h3 className="text-2xl font-bold text-white">English AI Tutor</h3>
+                <h3 className="text-2xl font-bold">English AI Tutor</h3>
               </div>
-              <p className="text-gray-300 text-lg leading-relaxed mb-8 max-w-lg">
+              <p className="text-gray-400 text-lg leading-relaxed mb-8 max-w-lg">
                 Transform your English learning journey with AI that understands your unique needs. 
-                Join thousands of learners who've achieved fluency faster than ever before.
               </p>
-              
-              {/* Social Links */}
-              <div className="flex space-x-4">
-                {[
-                  { icon: "M24 4.557c-.883.392-1.832.656-2.828.775 1.017-.609 1.798-1.574 2.165-2.724-.951.564-2.005.974-3.127 1.195-.897-.957-2.178-1.555-3.594-1.555-3.179 0-5.515 2.966-4.797 6.045-4.091-.205-7.719-2.165-10.148-5.144-1.29 2.213-.669 5.108 1.523 6.574-.806-.026-1.566-.247-2.229-.616-.054 2.281 1.581 4.415 3.949 4.89-.693.188-1.452.232-2.224.084.626 1.956 2.444 3.379 4.6 3.419-2.07 1.623-4.678 2.348-7.29 2.04 2.179 1.397 4.768 2.212 7.548 2.212 9.142 0 14.307-7.721 13.995-14.646.962-.695 1.797-1.562 2.457-2.549z", color: "hover:bg-blue-500" },
-                  { icon: "M22.46 6c-.77.35-1.6.58-2.46.69.88-.53 1.56-1.37 1.88-2.38-.83.5-1.75.85-2.72 1.05C18.37 4.5 17.26 4 16 4c-2.35 0-4.27 1.92-4.27 4.29 0 .34.04.67.11.98C8.28 9.09 5.11 7.38 3 4.79c-.37.63-.58 1.37-.58 2.15 0 1.49.75 2.81 1.91 3.56-.71 0-1.37-.2-1.95-.5v.03c0 2.08 1.48 3.82 3.44 4.21a4.22 4.22 0 0 1-1.93.07 4.28 4.28 0 0 0 4 2.98 8.521 8.521 0 0 1-5.33 1.84c-.34 0-.68-.02-1.02-.06C3.44 20.29 5.7 21 8.12 21 16 21 20.33 14.46 20.33 8.79c0-.19 0-.37-.01-.56.84-.6 1.56-1.36 2.14-2.23z", color: "hover:bg-blue-400" },
-                  { icon: "M12.017 0C5.396 0 .029 5.367.029 11.987c0 5.079 3.158 9.417 7.618 11.174-.105-.949-.199-2.403.041-3.439.219-.937 1.406-5.957 1.406-5.957s-.359-.72-.359-1.781c0-1.663.967-2.911 2.168-2.911 1.024 0 1.518.769 1.518 1.688 0 1.029-.653 2.567-.992 3.992-.285 1.193.6 2.165 1.775 2.165 2.128 0 3.768-2.245 3.768-5.487 0-2.861-2.063-4.869-5.008-4.869-3.41 0-5.409 2.562-5.409 5.199 0 1.033.394 2.143.889 2.741.099.12.112.225.085.345-.09.375-.293 1.199-.334 1.363-.053.225-.172.271-.402.165-1.495-.69-2.433-2.878-2.433-4.646 0-3.776 2.748-7.252 7.92-7.252 4.158 0 7.392 2.967 7.392 6.923 0 4.135-2.607 7.462-6.233 7.462-1.214 0-2.357-.629-2.748-1.378 0 0-.599 2.282-.744 2.84-.282 1.084-1.044 2.441-1.551 3.271C9.088 23.746 10.519 24 12.017 24c6.624 0 11.99-5.367 11.99-11.987C24.007 5.367 18.641.001 12.017.001z", color: "hover:bg-red-500" }
-                ].map((social, idx) => (
-                  <a key={idx} href="#" className={`w-12 h-12 bg-white/10 backdrop-blur-sm rounded-xl flex items-center justify-center text-gray-400 ${social.color} hover:text-white transition-all duration-300 hover:scale-110`}>
-                    <svg className="w-5 h-5" fill="currentColor" viewBox="0 0 24 24">
-                      <path d={social.icon}/>
-                    </svg>
-                  </a>
-                ))}
-              </div>
             </div>
-
-            {/* Quick Links */}
+            
             <div>
-              <h4 className="text-xl font-bold text-white mb-6">Learning Paths</h4>
-              <ul className="space-y-4">
-                {['Pronunciation Mastery', 'Conversation Practice', 'Vocabulary Builder', 'Grammar Guide', 'Fluency Tests'].map((item, idx) => (
-                  <li key={idx}>
-                    <a href="#" className="text-gray-300 hover:text-emerald-400 transition-colors duration-300 flex items-center group">
-                      <svg className="w-4 h-4 mr-3 text-emerald-500 group-hover:scale-110 transition-transform" fill="currentColor" viewBox="0 0 20 20">
-                        <path fillRule="evenodd" d="M7.293 14.707a1 1 0 010-1.414L10.586 10 7.293 6.707a1 1 0 011.414-1.414l4 4a1 1 0 010 1.414l-4 4a1 1 0 01-1.414 0z" clipRule="evenodd" />
-                      </svg>
-                      {item}
-                    </a>
-                  </li>
-                ))}
+              <h4 className="text-lg font-bold mb-6 text-emerald-400">Features</h4>
+              <ul className="space-y-3 text-gray-400">
+                <li><a href="#" className="hover:text-white transition">Smart Chat</a></li>
+                <li><a href="#" className="hover:text-white transition">Spaced Repetition</a></li>
+                <li><a href="#" className="hover:text-white transition">Personalized Path</a></li>
               </ul>
             </div>
 
-            {/* Support */}
             <div>
-              <h4 className="text-xl font-bold text-white mb-6">Support & More</h4>
-              <ul className="space-y-4">
-                {['Help Center', 'Contact Support', 'Learning Tips', 'Privacy Policy', 'Terms of Service'].map((item, idx) => (
-                  <li key={idx}>
-                    <a href="#" className="text-gray-300 hover:text-emerald-400 transition-colors duration-300 flex items-center group">
-                      <svg className="w-4 h-4 mr-3 text-emerald-500 group-hover:scale-110 transition-transform" fill="currentColor" viewBox="0 0 20 20">
-                        <path fillRule="evenodd" d="M7.293 14.707a1 1 0 010-1.414L10.586 10 7.293 6.707a1 1 0 011.414-1.414l4 4a1 1 0 010 1.414l-4 4a1 1 0 01-1.414 0z" clipRule="evenodd" />
-                      </svg>
-                      {item}
-                    </a>
-                  </li>
-                ))}
+              <h4 className="text-lg font-bold mb-6 text-emerald-400">Support</h4>
+              <ul className="space-y-3 text-gray-400">
+                <li><a href="#" className="hover:text-white transition">Help Center</a></li>
+                <li><a href="#" className="hover:text-white transition">Privacy</a></li>
+                <li><a href="#" className="hover:text-white transition">Contact</a></li>
               </ul>
             </div>
           </div>
-
-          {/* Bottom Section */}
-          <div className="border-t border-gray-800 pt-8 flex flex-col lg:flex-row justify-between items-center">
-            <p className="text-gray-400 mb-4 lg:mb-0 text-center lg:text-left">
-              © 2024 English AI Tutor. Empowering learners worldwide with cutting-edge AI technology.
-            </p>
-            <div className="flex items-center space-x-3 text-gray-400">
-              <span>Made with</span>
-              <div className="w-6 h-6 bg-gradient-to-r from-red-500 to-pink-500 rounded-full flex items-center justify-center animate-pulse">
-                <span className="text-white text-sm">❤️</span>
-              </div>
-              <span>for English learners</span>
-              <div className="w-8 h-8 bg-gradient-to-r from-emerald-500 to-teal-600 rounded-full flex items-center justify-center ml-2">
-                <span className="text-white text-sm">🌍</span>
-              </div>
-            </div>
+          
+          <div className="border-t border-gray-800 pt-8 flex flex-col md:flex-row justify-between items-center text-gray-500 text-sm">
+             <p>© 2024 English AI Tutor. All rights reserved.</p>
+             <div className="flex items-center gap-2 mt-4 md:mt-0">
+               <span>Made with</span>
+               <span className="text-red-500 animate-pulse">❤️</span>
+               <span>by AI</span>
+             </div>
           </div>
         </div>
       </footer>
