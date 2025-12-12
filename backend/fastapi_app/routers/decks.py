@@ -78,7 +78,7 @@ async def start_topic(
         return existing_deck
 
     # 2. Gọi Service tạo Deck mới
-    new_deck = await vocabulary.create_new_deck(user_id, topic_req.topic_name)
+    new_deck = await vocabulary.create_new_deck(user_id, topic_req.topic_name,topic_req.lesson_id)
     if not new_deck:
         raise HTTPException(status_code=500, detail="Không thể tạo bộ từ")
 
@@ -105,7 +105,7 @@ async def start_quiz_session(
     try:
         # 1. KIỂM TRA DECK TỒN TẠI
         # Gọi hàm CRUD đã được sửa đổi để tìm Deck bằng topic_name và user_id
-        deck_record = await  vocabulary.get_existing_deck_by_topic_name(
+        deck_record = await  vocabulary.check_existing_deck(
             user_id=user_id, 
             topic_name=topic_req.topic_name
         )

@@ -115,8 +115,10 @@ class QuizResultCreate(BaseModel):
 class TopicRequest(BaseModel):
     """Schema dùng cho input khi người dùng click START topic"""
     topic_name: str
-    lesson_id: str # Giữ nguyên lesson_id là bắt buộc khi START (vì Frontend luôn biết nó)
-    
+    lesson_id: Optional[str] = Field(None, alias="lessonId")  
+
+    class Config:
+        allow_population_by_field_name = True
 class DeckResponse(BaseModel):
     """Schema đơn giản trả về cho Frontend biết trạng thái của Deck"""
     id: int 

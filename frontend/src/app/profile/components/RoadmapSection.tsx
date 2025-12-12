@@ -280,7 +280,7 @@ export function RoadmapSection({ userLevel }: RoadmapSectionProps) {
                 // 🚨 CHUYỂN HƯỚNG SỬ DỤNG ID TRẢ VỀ VÀ TRUYỀN lessonId
                 if (taskType === 'grammar') {
                     // Truyền lessonId cho Grammar nếu cần thiết
-                    router.push(`/quiz_grammar?sessionId=${result.id}&lessonId=${lessonId}`); 
+                    router.push(`/quiz_grammar?sessionId=${result.id}&lesson_id=${lessonId}`); 
                 } else if (taskType === 'vocabulary') {
                     const deckId = result.id; 
                     
@@ -288,7 +288,7 @@ export function RoadmapSection({ userLevel }: RoadmapSectionProps) {
                          router.push(`/vocabulary/${deckId}`); 
                     } else {
                          // TRUYỀN lessonId qua URL params
-                         router.push(`/practice/quiz/game?type=user&id=${deckId}&lessonId=${lessonId}`); 
+                         router.push(`/practice/quiz/game?type=user&id=${deckId}&lesson_id=${lessonId}`); 
                     }
                 } 
             } else {

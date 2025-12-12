@@ -225,13 +225,13 @@ async def check_existing_deck(user_id: str, topic_name: str):
 async def create_new_deck(user_id: str, topic_name: str, lesson_id: Optional[str]):
     if admin_supabase is None:
         raise Exception("Supabase client is not initialized.")
-        
+    final_lesson_id = lesson_id if lesson_id and lesson_id.strip() else None
     # Chuẩn bị dữ liệu để insert, bao gồm lesson_id
     data_to_insert = {
         "user_id": user_id,
         "name": topic_name,
         "description": f"AI generated for {topic_name}",
-        "lesson_id": lesson_id if lesson_id else None # ✅ LƯU lesson_id
+        "lesson_id": final_lesson_id # ✅ LƯU lesson_id
     }
     
     try:
@@ -298,28 +298,38 @@ async def generate_vocab_for_deck_supabase(deck_id: int, topic_name: str, user_i
 
 logger = logging.getLogger(__name__)
 
-async def get_existing_deck_by_topic_name(user_id: str, topic_name: str) -> Optional[Dict[str, Any]]:
-    if admin_supabase is None:
-        logger.error("Supabase client is not initialized.")
-        return None
+# async def get_existing_deck_by_topic_name(user_id: str, topic_name: str) -> Optional[Dict[str, Any]]:
+#     """
+#     Truy vấn bảng Decks để tìm bản ghi Deck đã tồn tại dựa trên user_id và topic_name.
+    
+#     Args:
+#         user_id: UUID của người dùng.
+#         topic_name: Tên chủ đề (topic_name) được gửi từ Frontend (ví dụ: "Tư vựng về thông tin cá nhân (tên, tuổi, quốc tịch, nghề nghiệp)").
         
-    try:
-        res = (
-            admin_supabase.table("Decks")
-            .select("id") # Chỉ cần Deck ID
-            .eq("user_id", user_id)
-            .eq("name", topic_name) # ✅ Dùng cột 'name' để tìm kiếm theo tên chủ đề
-            .limit(1)
-            .maybe_single()
-            .execute()
-        )
+#     Returns:
+#         Đối tượng Deck (Dict) chứa ít nhất 'id' nếu tìm thấy, ngược lại là None.
+#     """
+#     if admin_supabase is None:
+#         logger.error("Supabase client is not initialized.")
+#         return None
         
-        if not res.data:
-            return None 
+#     try:
+#         res = (
+#             admin_supabase.table("Decks")
+#             .select("id") # Chỉ cần Deck ID
+#             .eq("user_id", user_id)
+#             .eq("name", topic_name) # ✅ Dùng cột 'name' để tìm kiếm theo tên chủ đề
+#             .limit(1)
+#             .maybe_single()
+#             .execute()
+#         )
+        
+#         if not res.data:
+#             return None 
 
-        # Nếu tìm thấy, res.data là dictionary của bản ghi Deck
-        return res.data 
+#         # Nếu tìm thấy, res.data là dictionary của bản ghi Deck
+#         return res.data 
 
-    except Exception as e:
-        logger.error(f"Lỗi khi truy vấn existing deck cho user {user_id} và topic {topic_name}: {e}")
-        return None
+#     except Exception as e:
+#         logger.error(f"Lỗi khi truy vấn existing deck cho user {user_id} và topic {topic_name}: {e}")
+#         return None
