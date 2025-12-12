@@ -1,7 +1,7 @@
 from fastapi import APIRouter, Depends, status, HTTPException, BackgroundTasks
 from typing import List
 from fastapi_app import schemas
-from fastapi_app.schemas.decks import Deck, TopicRequest
+from fastapi_app.schemas.decks import Deck, TopicRequest, DeckSessionResponse
 from fastapi_app.dependencies import get_current_user_id
 from fastapi_app.crud import decks as deck_crud
 from fastapi_app.crud import vocabulary as vocab_crud
@@ -66,7 +66,7 @@ def delete_user_deck(
     return deck_crud.delete_deck(deck_id=deck_id, user_id=user_id)
 
 
-@router.post("/start-topic", response_model=Deck) 
+@router.post("/create-deck", response_model=Deck) 
 async def start_topic(
     topic_req: TopicRequest, 
     background_tasks: BackgroundTasks,
@@ -91,3 +91,43 @@ async def start_topic(
     )
 
     return new_deck
+
+    
+@router.post("/start-quiz", response_model=DeckSessionResponse) 
+async def start_quiz_session(
+    topic_req: schemas.TopicRequest, 
+    user_id: str = Depends(get_current_user_id)
+):
+    """
+    API này tìm Deck đã tồn tại và trả về ID của Deck đó (Deck ID).
+    Nếu Deck chưa có (chưa click TIÊU ĐỀ để tạo), trả về lỗi 404.
+    """
+    try:
+        # 1. KIỂM TRA DECK TỒN TẠI
+        # Gọi hàm CRUD đã được sửa đổi để tìm Deck bằng topic_name và user_id
+        deck_record = await  vocabulary.get_existing_deck_by_topic_name(
+            user_id=user_id, 
+            topic_name=topic_req.topic_name
+        )
+        
+        if not deck_record:
+            # 🛑 TRẢ VỀ LỖI 404 nếu Deck chưa được tạo (theo logic nút START)
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND, 
+                detail="Bộ từ vựng cho chủ đề này chưa được tạo. Vui lòng click vào TIÊU ĐỀ task để tạo bộ từ vựng trước khi làm bài Quiz."
+            )
+
+        deck_id = deck_record['id']
+        
+        # 2. BỎ QUA VIỆC TẠO SESSION QUIZ
+        # 3. TRẢ VỀ DECK ID (sẽ được Frontend dùng làm ID để điều hướng)
+        return {"id": deck_id}
+        
+    except HTTPException as e:
+        # Re-raise lỗi 404 hoặc 401/403 nếu có
+        raise e
+    except Exception as e:
+        # Xử lý các lỗi DB không xác định (ví dụ: lỗi kết nối)
+        print(f"Lỗi không xác định trong start_quiz_session: {e}")
+        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, 
+                            detail="Lỗi máy chủ khi truy vấn Deck.")

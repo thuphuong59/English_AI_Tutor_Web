@@ -136,7 +136,35 @@ def calculate_mcq_score(
     }
 
 # -----------------------------------------------------------------
-
+def initialize_user_progress(learning_phases: List[Dict[str, Any]]) -> Dict[str, Any]:
+    """
+    Quét qua toàn bộ learning_phases và khởi tạo trạng thái tiến độ ban đầu cho 
+    tất cả các lesson_id tìm thấy.
+    """
+    user_progress = {}
+    
+    # 1. Lặp qua các Giai đoạn (Phases)
+    for phase in learning_phases:
+        for week in phase.get("weeks", []):
+            
+            # 2. Lặp qua các Kỹ năng (Grammar, Vocab, Speaking)
+            for skill_type in ["grammar", "vocabulary", "speaking"]:
+                skill_data = week.get(skill_type)
+                
+                if skill_data and skill_data.get("items"):
+                    # 3. Lặp qua các Items (Bài học)
+                    for item in skill_data["items"]:
+                        lesson_id = item.get("lesson_id")
+                        
+                        if lesson_id and lesson_id not in user_progress:
+                            # 4. Khởi tạo trạng thái ban đầu
+                            user_progress[lesson_id] = {
+                                "completed": False, 
+                                "score": None,
+                                "type": skill_type # Lưu loại kỹ năng để dễ truy vấn sau này
+                            }
+                            
+    return user_progress
 async def analyze_and_generate_roadmap(
     payload_data: FinalAssessmentSubmission,
     audio_files: Dict[str, UploadFile]
@@ -354,7 +382,8 @@ async def analyze_and_generate_roadmap(
                 "duration_weeks": duration_weeks,
                 "weeks": standardized_weeks,
             })
-
+        # Chuẩn bị roadmap cuối cùng để lưu
+        initial_progress = initialize_user_progress(final_learning_phases)
 
         final_roadmap = {
             "user_summary": user_summary, 
@@ -364,7 +393,8 @@ async def analyze_and_generate_roadmap(
             "daily_plan_recommendation": raw_roadmap.get("daily_plan_recommendation", f"Khuyến nghị: Học {prefs_dict['daily_commitment']} mỗi ngày."),
             "learning_phases": final_learning_phases,
             "diagnostic_summary": mcq_analysis,
-            "speaking_transcripts": full_speaking_analysis
+            "speaking_transcripts": full_speaking_analysis,
+            "user_progress": initial_progress,  
         }
         
         # --- 4. LƯU ROADMAP VÀO admin_supabase ---

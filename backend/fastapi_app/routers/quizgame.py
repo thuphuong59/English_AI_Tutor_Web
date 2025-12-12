@@ -7,7 +7,7 @@ from fastapi_app import schemas
 from fastapi_app.dependencies import get_current_user 
 from fastapi_app.services import quizgame as quiz_service
 
-router = APIRouter()
+router = APIRouter(tags=["Quiz Game"])
 
 @router.get(
     "/quiz-data/{deck_type}-deck/{deck_id}", 
@@ -16,7 +16,7 @@ router = APIRouter()
 )
 def get_smart_quiz_data(
     deck_type: str, 
-    deck_id: int,   
+    deck_id: int,  
     current_user = Depends(get_current_user) 
 ):
     """
@@ -24,9 +24,7 @@ def get_smart_quiz_data(
     game "thông minh" (hỗn hợp 3 loại game).
     """
     try:
-       
         user_id = str(current_user.id)
-        
         return quiz_service.create_smart_quiz(
             deck_type=deck_type, 
             deck_id=deck_id, 
@@ -36,7 +34,7 @@ def get_smart_quiz_data(
         raise e
     except Exception as e:
         print(f"--- LỖI THẬT TRONG router get_smart_quiz_data ---: {e}") 
-        raise HTTPException(status_code=500, detail=str(e))
+        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=str(e))
 
 @router.post(
     "/quiz/feedback", 
@@ -53,7 +51,6 @@ def submit_quiz_feedback(
     """
     try:
         user_id = str(current_user.id)
-        
         return quiz_service.process_quiz_feedback(
             user_id=user_id, 
             missed_words=feedback_data.missed_words
@@ -62,20 +59,21 @@ def submit_quiz_feedback(
         raise e
     except Exception as e:
         print(f"--- LỖI THẬT TRONG router submit_quiz_feedback ---: {e}") 
-        raise HTTPException(status_code=500, detail=str(e))
+        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=str(e))
     
 @router.post("/quiz/save-result", response_model=SuccessResponse)
-def save_quiz_result(
+async def save_quiz_result( # 🚨 Đã chuyển thành ASYNC
     result_data: QuizResultCreate,
     current_user = Depends(get_current_user) 
 ):
     """
-    API Endpoint: Lưu kết quả bài kiểm tra.
-    Router chỉ nhận request -> gọi Service -> trả về Response.
+    API Endpoint: Lưu kết quả bài kiểm tra và cập nhật Roadmap nếu task liên quan.
     """
     try:
         user_id = str(current_user.id)
-        quiz_service.process_save_quiz_result(result_data, user_id)
+        
+        # 🚨 ĐÃ SỬA LỖI: Gọi hàm Service GỘP ASYNC với thứ tự đối số đúng (user_id, result_data)
+        await quiz_service.process_quiz_completion(user_id, result_data) 
         
         return {
             "success": True, 
@@ -86,4 +84,4 @@ def save_quiz_result(
         raise http_ex
     except Exception as e:
         print(f"Router Error [save_quiz_result]: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
+        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=str(e))

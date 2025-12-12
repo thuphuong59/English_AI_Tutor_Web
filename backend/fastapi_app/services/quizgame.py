@@ -6,7 +6,10 @@ import re
 from fastapi_app.schemas.decks import QuizResultCreate
 from fastapi_app.crud import decks as decks_crud 
 from fastapi_app.crud import vocabulary as vocab_crud
-
+import logging
+from fastapi_app.database import admin_supabase
+from fastapi_app.services import assessment_service
+import anyio
 # --- CẤU HÌNH QUIZ ---
 TOTAL_QUESTIONS = 10
 NUM_MC_C2V = 4
@@ -227,9 +230,9 @@ def process_quiz_feedback(user_id: str, missed_words: List[str]) -> dict:
         print(f"--- LỖI THẬT TRONG process_quiz_feedback ---: {e}") 
         raise HTTPException(status_code=500, detail=f"Error processing feedback: {str(e)}")
 
-def process_save_quiz_result(result_data: QuizResultCreate, user_id: str):
+async def process_save_quiz_result(result_data: QuizResultCreate, user_id: str):
     """
-    Xử lý logic tính toán điểm và gọi CRUD để lưu.
+    Xử lý logic tính toán điểm và gọi CRUD để lưu. (Không gọi Roadmap).
     """
     try:
         # Tính phần trăm điểm
@@ -243,8 +246,11 @@ def process_save_quiz_result(result_data: QuizResultCreate, user_id: str):
             "deck_id": result_data.deck_id,
             "score": result_data.score,
             "total_questions": result_data.total_questions,
-            "percentage": round(percentage, 2)
+            "percentage": round(percentage, 2),
+            "lesson_id": result_data.lesson_id # ✅ ĐÃ THÊM: Lưu lesson_id vào bảng lịch sử
         }
+        
+        # Gọi hàm CRUD để lưu kết quả
         response = vocab_crud.insert_quiz_result(data_to_insert)
 
         if not response.data:
@@ -253,6 +259,89 @@ def process_save_quiz_result(result_data: QuizResultCreate, user_id: str):
         return True
 
     except Exception as e:
-        print(f"Service Error [process_save_quiz_result]: {e}")
+        logger.error(f"Service Error [process_save_quiz_result]: {e}")
         raise e
-   
+
+# =================================================================
+# 🚨 HÀM MỚI: XỬ LÝ TOÀN BỘ QUÁ TRÌNH HOÀN TẤT QUIZ (ORCHESTRATOR)
+
+
+logger = logging.getLogger(__name__)
+
+MASTERY_THRESHOLD = 0.2 
+async def process_quiz_completion(user_id: str, result_data: QuizResultCreate):
+    """
+    Hàm điều phối cho Quiz Vocabulary: Tính điểm, lưu lịch sử, 
+    và cập nhật Roadmap TRỰC TIẾP bằng cách thao tác DB.
+    """
+    try:
+        if admin_supabase is None:
+            raise HTTPException(status_code=500, detail="Lỗi DB: Supabase client không khả dụng.")
+            
+        # 1. TÍNH ĐIỂM SỐ VÀ MASTERY
+        if result_data.total_questions is None or result_data.total_questions == 0:
+            score = 0.0
+        else:
+            score = result_data.score / result_data.total_questions
+        
+        mastery_achieved = score >= MASTERY_THRESHOLD
+        lesson_id_to_mark = result_data.lesson_id
+
+        # 🚨 DEBUG 1: Kiểm tra điều kiện đầu vào
+        logger.info(f"DEBUG INPUT: Lesson={lesson_id_to_mark}, Score={score:.2f}, Mastery={mastery_achieved}")
+
+        # 2. LƯU LỊCH SỬ QUIZ CHI TIẾT 
+        await process_save_quiz_result(result_data, user_id) 
+
+        # 3. CẬP NHẬT ROADMAP (LOGIC GỘP)
+        if lesson_id_to_mark and mastery_achieved:
+            logger.info(f"Triggering direct roadmap update for {lesson_id_to_mark} (Voca). Score: {score}")
+
+            # 3a. Lấy bản ghi Roadmap hiện tại (Sử dụng run_sync vì hàm là def)
+            roadmap_record = await anyio.to_thread.run_sync(
+                assessment_service.get_user_roadmap, # Hàm def cần chạy
+                user_id # Đối số truyền vào hàm
+            )
+            
+            # 🚨 DEBUG 2: Kiểm tra dữ liệu Roadmap nhận được
+            if roadmap_record is False: # Nếu get_user_roadmap trả về False khi lỗi DB
+                 logger.error(f"DEBUG ROADMAP: get_user_roadmap returned False (DB connection failed).")
+                 return {"status": "error", "message": "Failed to fetch roadmap data."}
+
+            if roadmap_record and isinstance(roadmap_record, dict) and roadmap_record.get('data'):
+                
+                # 🚨 DEBUG 3: Xác nhận tiến hành cập nhật
+                logger.info(f"DEBUG ROADMAP: Proceeding to update Roadmap ID {roadmap_record.get('id')}")
+                
+                current_roadmap_data = roadmap_record['data']
+                current_progress = current_roadmap_data.get('user_progress', {})
+                roadmap_id = roadmap_record.get('id')
+
+                # 3b. Cập nhật trạng thái của lesson_id đó
+                update_data = {
+                    "completed": mastery_achieved, 
+                    "score": round(score * 100), 
+                    "type": "vocabulary"
+                }
+
+                current_progress[lesson_id_to_mark] = update_data
+                current_roadmap_data['user_progress'] = current_progress
+
+                # 3c. Lưu lại toàn bộ bản ghi roadmaps
+                if roadmap_id:
+                    admin_supabase.table("roadmaps") \
+                        .update({"data": current_roadmap_data}) \
+                        .eq("id", roadmap_id) \
+                        .execute()
+                    
+                    logger.info(f"✅ [PROGRESS TRACKED] Vocabulary {lesson_id_to_mark} updated successfully.")
+            else:
+                logger.warning(f"Roadmap data not valid or not found for user {user_id}. Skipping roadmap update.")
+
+        return {"status": "success"}
+
+    except HTTPException as e:
+        raise e
+    except Exception as e:
+        logger.error(f"Lỗi trong quá trình hoàn tất Quiz Vocabulary (Gộp Logic): {e}")
+        raise HTTPException(status_code=500, detail=f"Lỗi khi hoàn tất bài Quiz: {str(e)}")

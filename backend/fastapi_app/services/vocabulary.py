@@ -12,6 +12,7 @@ from fastapi_app.crud import vocabulary as vocab_crud
 import google.generativeai  as genai
 from fastapi_app.prompts import vocabulary as prompts
 from fastapi_app.services import vocabulary
+import logging
 
 
 try:
@@ -221,14 +222,26 @@ async def check_existing_deck(user_id: str, topic_name: str):
         .execute()
     return response.data[0] if response.data else None
 
-async def create_new_deck(user_id: str, topic_name: str):
-    """Tạo bộ từ mới rỗng."""
-    insert_res = admin_supabase.table("Decks").insert({
+async def create_new_deck(user_id: str, topic_name: str, lesson_id: Optional[str]):
+    if admin_supabase is None:
+        raise Exception("Supabase client is not initialized.")
+        
+    # Chuẩn bị dữ liệu để insert, bao gồm lesson_id
+    data_to_insert = {
         "user_id": user_id,
         "name": topic_name,
-        "description": f"AI generated for {topic_name}"
-    }).execute()
-    return insert_res.data[0]
+        "description": f"AI generated for {topic_name}",
+        "lesson_id": lesson_id if lesson_id else None # ✅ LƯU lesson_id
+    }
+    
+    try:
+        insert_res = admin_supabase.table("Decks").insert(data_to_insert).execute()
+        return insert_res.data[0]
+        
+    except Exception as e:
+        print(f"Lỗi khi tạo Deck mới: {e}")
+        # Tùy chọn: Log lỗi chi tiết hơn ở đây
+        return None
 async def get_user_level(user_id: str) -> str:
     """Truy vấn Supabase để lấy Level của người dùng từ bảng roadmaps."""
     try:
@@ -282,3 +295,41 @@ async def generate_vocab_for_deck_supabase(deck_id: int, topic_name: str, user_i
             admin_supabase.table("UserVocabulary").insert(vocab_list).execute()
     except Exception as e:
         print(f"Service Background Task Error: {e}")
+
+logger = logging.getLogger(__name__)
+
+async def get_existing_deck_by_topic_name(user_id: str, topic_name: str) -> Optional[Dict[str, Any]]:
+    """
+    Truy vấn bảng Decks để tìm bản ghi Deck đã tồn tại dựa trên user_id và topic_name.
+    
+    Args:
+        user_id: UUID của người dùng.
+        topic_name: Tên chủ đề (topic_name) được gửi từ Frontend (ví dụ: "Tư vựng về thông tin cá nhân (tên, tuổi, quốc tịch, nghề nghiệp)").
+        
+    Returns:
+        Đối tượng Deck (Dict) chứa ít nhất 'id' nếu tìm thấy, ngược lại là None.
+    """
+    if admin_supabase is None:
+        logger.error("Supabase client is not initialized.")
+        return None
+        
+    try:
+        res = (
+            admin_supabase.table("Decks")
+            .select("id") # Chỉ cần Deck ID
+            .eq("user_id", user_id)
+            .eq("name", topic_name) # ✅ Dùng cột 'name' để tìm kiếm theo tên chủ đề
+            .limit(1)
+            .maybe_single()
+            .execute()
+        )
+        
+        if not res.data:
+            return None 
+
+        # Nếu tìm thấy, res.data là dictionary của bản ghi Deck
+        return res.data 
+
+    except Exception as e:
+        logger.error(f"Lỗi khi truy vấn existing deck cho user {user_id} và topic {topic_name}: {e}")
+        return None

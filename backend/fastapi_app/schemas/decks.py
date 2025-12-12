@@ -8,6 +8,7 @@ from fastapi_app.schemas.vocabulary import VocabularyStats, WordInDB
 class DeckBase(BaseModel):
     name: str
     description: Optional[str] = None
+    lesson_id: Optional[str] = None  # 🚨 ĐÃ THÊM: Lưu ID bài học liên quan (NULL nếu không thuộc Roadmap)
 
 class DeckCreate(DeckBase):
     pass
@@ -15,6 +16,7 @@ class DeckCreate(DeckBase):
 class Deck(DeckBase):
     id: int
     user_id: str 
+    # lesson_id được thừa hưởng từ DeckBase
 
     class Config:
         from_attributes = True # Cập nhật cho Pydantic v2
@@ -27,9 +29,9 @@ class DeckDetail(BaseModel):
     """
     Schema trả về cho trang chi tiết bộ từ
     """
-    deck_info: Deck             # Thông tin của bộ từ (Tên, mô tả...)
-    stats: VocabularyStats      # Thống kê của riêng bộ từ này
-    words: List[WordInDB]       # Danh sách các từ trong bộ này
+    deck_info: Deck 
+    stats: VocabularyStats 
+    words: List[WordInDB] 
 
     class Config:
         from_attributes = True
@@ -38,9 +40,10 @@ class DeckUpdate(BaseModel):
     """Schema khi người dùng cập nhật tên/mô tả của Deck."""
     name: Optional[str] = None
     description: Optional[str] = None
+    lesson_id: Optional[str] = None # Thêm lesson_id vào update nếu cần
 
 # --- Public Deck Schemas ---
-
+# (Giữ nguyên)
 class PublicDeck(BaseModel):
     """Schema cho một Bộ từ Công cộng (từ bảng PublicDecks)"""
     id: int
@@ -56,7 +59,7 @@ class PublicWord(BaseModel):
     id: int
     deck_id: int
     word: str
-    type: Optional[str] = None # <--- THÊM MỚI: Để đồng bộ hiển thị loại từ
+    type: Optional[str] = None
     definition: str
     pronunciation: Optional[str] = None
     context_sentence: Optional[str] = None
@@ -73,8 +76,8 @@ class PublicDeckDetail(BaseModel):
     class Config:
         from_attributes = True
     
-# --- AI ANALYSIS ---   
-
+# --- AI ANALYSIS ---   
+# (Giữ nguyên)
 class AnalyzeResponse(BaseModel):
     """Schema trả về cho API /analyze"""
     message: str
@@ -107,13 +110,21 @@ class QuizResultCreate(BaseModel):
     deck_id: int | None = None
     score: int
     total_questions: int
+    lesson_id: Optional[str] = None # 🚨 ĐÃ THÊM: Truyền lesson_id khi nộp kết quả Quiz
+    
 class TopicRequest(BaseModel):
     """Schema dùng cho input khi người dùng click START topic"""
     topic_name: str
-    lesson_id: str
+    lesson_id: str # Giữ nguyên lesson_id là bắt buộc khi START (vì Frontend luôn biết nó)
     
 class DeckResponse(BaseModel):
     """Schema đơn giản trả về cho Frontend biết trạng thái của Deck"""
     id: int 
     status: str # Ví dụ: "exists" hoặc "generating"
 
+class DeckSessionResponse(BaseModel):
+    """Schema trả về ID của phiên Quiz/Test mới được tạo (Session ID)"""
+    id: int 
+    
+    class Config:
+        from_attributes = True
