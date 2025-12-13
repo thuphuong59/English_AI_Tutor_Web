@@ -1,98 +1,92 @@
 "use client";
-import { useState } from "react";
+import React, { useState } from "react";
 import toast from "react-hot-toast";
+import { ArrowRight, ArrowLeft, Loader2, Target, CheckCircle } from "lucide-react";
 
-import LoadingModal from "../../components/ui/LoadingModal"; 
-
-// 🚨 ĐÃ CẬP NHẬT URL CHÍNH XÁC DỰA TRÊN KẾT QUẢ TEST TRƯỚC ĐÓ 🚨
+// 🚨 ĐÃ SỬA LẠI URL API VỀ ĐỊA CHỈ BACKEND CỤ THỂ 🚨
+// Nếu bạn chạy backend ở port khác, hãy đổi lại số 8000
 const BACKEND_API_URL = 'http://127.0.0.1:8000/quiz/test'; 
 
 // Dữ liệu lựa chọn
-const communicationGoalOptions = [
-    "Work, Interview",
-    "Travel, Culture",
-    "Daily Social Interaction",
-    "Other",
-];
+const stepOptions = {
+    goals: [
+        "Work, Interviews",
+        "Travel, Culture",
+        "Daily Conversation",
+        "Other",
+    ],
+    duration: [
+        "1 Month",
+        "2–3 Months",
+        "6 Months",
+        "Long-term / Undefined",
+        "Other",
+    ],
+    barrier: [
+        "Slow Reflexes",
+        "Pronunciation Issues",
+        "Lack of Vocabulary",
+        "Basic Grammar Errors",
+        "Other",
+    ],
+    dailyTime: [
+        "15 Minutes",
+        "30 Minutes",
+        "1 Hour",
+        "Over 1 Hour",
+        "Other",
+    ],
+};
 
-const durationOptions = [
-    { item: "1 month" },
-    { item: "2–3 months" },
-    { item: "6 months" },
-    { item: "Long-term / Unspecified" },
-    { item: "Other" },
-];
-
-const confidenceBarrierOptions = [
-    { item: "Slow response" },
-    { item: "Incorrect pronunciation" },
-    { item: "Lack of vocabulary" },
-    { item: "Basic grammar mistakes" },
-    { item: "Other" },
-];
-
-const dailyTimeOptions = [
-    { item: "15 minutes" },
-    { item: "30 minutes" },
-    { item: "1 hour" },
-    { item: "More than 1 hour" },
-    { item: "Other" },
-];
+interface PreferenceData {
+    communication_goal: string;
+    target_duration: string;
+    confidence_barrier: string;
+    daily_commitment: string;
+}
 
 export default function PreferencesPage() {
-    // --- STATES ---
     const [step, setStep] = useState(1);
     
-    // B1: Goal
     const [goal, setGoal] = useState(""); 
     const [customGoal, setCustomGoal] = useState("");
     
-    // B2: Duration
     const [duration, setDuration] = useState("");
     const [customDuration, setCustomDuration] = useState("");
 
-    // B3: Barrier
     const [barrier, setBarrier] = useState("");
     const [customBarrier, setCustomBarrier] = useState("");
 
-    // B4: Daily Time
     const [dailyTime, setDailyTime] = useState("");
     const [customDailyTime, setCustomDailyTime] = useState("");
     
     const [fade, setFade] = useState(true);
     const [isSubmitting, setIsSubmitting] = useState(false); 
 
-    // --- LOGIC FUNCTIONS ---
-    
     const handleSubmit = async () => {
-        
-        // 1. Xử lý DỮ LIỆU CUỐI CÙNG
         const finalGoal = goal === "Other" ? customGoal : goal;
         const finalDuration = duration === "Other" ? customDuration : duration;
         const finalBarrier = barrier === "Other" ? customBarrier : barrier;
         const finalDailyTime = dailyTime === "Other" ? customDailyTime : dailyTime;
 
-        // --- VALIDATION CUỐI CÙNG ---
-        if (!finalGoal) { toast.error("Please select a communication goal!"); return; }
-        if (!finalDuration) { toast.error("Please select a target duration!"); return; }
-        if (!finalBarrier) { toast.error("Please select your confidence issue!"); return; }
-        if (!finalDailyTime) { toast.error("Please select your daily study duration!"); return; }
+        if (!finalGoal) { toast.error("Please select a communication goal."); return; }
+        if (!finalDuration) { toast.error("Please select a target duration."); return; }
+        if (!finalBarrier) { toast.error("Please identify your biggest barrier."); return; }
+        if (!finalDailyTime) { toast.error("Please specify your daily study commitment."); return; }
 
-        // --- DỮ LIỆU GỬI ĐI (Khớp với PreferenceData Schema 4 trường) ---
-        const userData = {
+        const userData: PreferenceData = {
             communication_goal: finalGoal,
             target_duration: finalDuration,
             confidence_barrier: finalBarrier,
             daily_commitment: finalDailyTime,
         };
 
-        // Bắt đầu gửi API và Loading
         setIsSubmitting(true);
         
         try {
-            toast.loading("Đang tạo câu hỏi chẩn đoán...", { id: 'loading-quiz', duration: 10000 }); 
+            toast.loading("Generating diagnostic quiz...", { id: 'loading-quiz', duration: 10000 }); 
 
-            const response = await fetch(BACKEND_API_URL, { // 🚨 SỬ DỤNG URL MỚI ĐÃ SỬA
+            const response = await fetch(BACKEND_API_URL, { 
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify(userData),
@@ -100,197 +94,111 @@ export default function PreferencesPage() {
 
             toast.dismiss('loading-quiz');
 
+            // --- XỬ LÝ LỖI "Unexpected token <" (HTML Response) ---
+            const contentType = response.headers.get("content-type");
+            if (contentType && contentType.indexOf("application/json") === -1) {
+                // Nếu phản hồi KHÔNG phải là JSON (thường là HTML lỗi 404/500)
+                const text = await response.text();
+                console.error("Non-JSON Response from Server:", text);
+                throw new Error(`Server returned HTML instead of JSON. Check API URL (${response.status})`);
+            }
+
             if (!response.ok) {
                 const errorData = await response.json(); 
-                throw new Error(errorData.detail || 'Lỗi không xác định từ Server.');
+                throw new Error(errorData.detail || `Server Error: ${response.status}`);
             }
 
             const quizData = await response.json();
             localStorage.setItem("userQuizData", JSON.stringify(quizData)); 
             
-            toast.success("Đã tạo bài test chẩn đoán thành công!");
+            toast.success("Diagnostic quiz generated successfully!");
 
             setTimeout(() => {
-                window.location.href = "/test/quiz";
+                window.location.href = "/test/quiz"; 
             }, 800);
 
         } catch (error) {
-            console.error("Lỗi gửi dữ liệu hoặc xử lý API:", error);
-
-            let errorMessage = 'Không thể kết nối Backend.';
-            if (error instanceof Error) { errorMessage = error.message; } else if (typeof error === 'string') { errorMessage = error; }
+            console.error("API error:", error);
+            let errorMessage = 'Failed to connect to backend.';
+            if (error instanceof Error) { errorMessage = error.message; }
             
             toast.dismiss('loading-quiz');
-            toast.error(`Lỗi: ${errorMessage}`);
-
+            toast.error(`Error: ${errorMessage}`);
         } finally {
-            setIsSubmitting(false); // Kết thúc quá trình submit
+            setIsSubmitting(false); 
         }
     };
     
-    // --- STEP CONTENT DEFINITION (4 BƯỚC) ---
+    // --- RENDER HELPERS ---
+    const renderOptions = (
+        options: string[], 
+        selected: string, 
+        setSelected: (val: string) => void, 
+        setCustom: (val: string) => void, 
+        customValue: string, 
+        customPlaceholder: string
+    ) => (
+        <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
+            {options.map((item) => (
+                <div
+                    key={item}
+                    className={`cursor-pointer p-5 rounded-xl border-2 transition-all duration-200 shadow-sm flex items-center justify-center text-center h-20
+                        ${selected === item 
+                            ? "bg-blue-600 border-blue-600 text-white shadow-blue-300/50 transform scale-[1.02]" 
+                            : "bg-white border-gray-200 text-gray-700 hover:border-blue-400 hover:bg-blue-50"}
+                    `}
+                    onClick={() => { setSelected(item); setCustom(""); }}
+                >
+                    <span className="font-bold text-lg">{item}</span>
+                    {selected === item && <CheckCircle className="w-5 h-5 ml-2 text-white absolute right-4 md:static md:ml-2" />}
+                </div>
+            ))}
+            
+            {selected === "Other" && (
+                <div className="col-span-1 md:col-span-2 mt-2 animate-fade-in-up">
+                    <input
+                        type="text"
+                        placeholder={customPlaceholder}
+                        className="p-4 border-2 border-blue-200 rounded-xl shadow-sm w-full focus:ring-4 focus:ring-blue-100 focus:border-blue-600 transition duration-150 text-lg outline-none"
+                        value={customValue}
+                        onChange={(e) => setCustom(e.target.value)}
+                        autoFocus
+                    />
+                </div>
+            )}
+        </div>
+    );
+
     const stepsContent = [
-        // BƯỚC 1: MỤC TIÊU GIAO TIẾP
         {
-            title: "1. In which situation do you most want to feel confident communicating?",
-            content: (
-                <div className="flex flex-col gap-3">
-                    {communicationGoalOptions.map((item) => (
-                        <div
-                            key={item}
-                            className={`cursor-pointer p-4 rounded-xl border-2 transition-all duration-200 shadow-sm flex items-center space-x-4 
-                                ${goal === item ? "bg-emerald-100 border-emerald-600 ring-4 ring-emerald-200" : "bg-white border-gray-300 hover:border-emerald-600"}
-                            `}
-                            onClick={() => setGoal(item)}
-                        >
-                            <span className="text-xl"></span>
-                            <span className="font-medium text-lg text-gray-800">{item}</span>
-                        </div>
-                    ))}
-                    
-                    {goal === "Other" && (
-                        <div className="mt-2">
-                            <input
-                                type="text"
-                                placeholder="Nhập mục tiêu cụ thể..."
-                                className="p-3 border-2 border-dashed border-gray-400 rounded-lg shadow-sm w-full focus:ring-emerald-500 focus:border-emerald-500 transition duration-150 text-lg font-medium"
-                                value={customGoal}
-                                onChange={(e) => setCustomGoal(e.target.value)}
-                                autoFocus
-                            />
-                        </div>
-                    )}
-                </div>
-            ),
+            title: "1. What is your main communication goal?",
+            content: renderOptions(stepOptions.goals, goal, setGoal, setCustomGoal, customGoal, "Enter your specific goal..."),
         },
-        // BƯỚC 2: MỤC TIÊU THỜI GIAN
         {
-            title: "2. How long do you want to achieve that goal?", 
-            content: (
-                <div className="flex flex-col gap-3">
-                    {durationOptions.map(({ item}) => (
-                        <div
-                            key={item}
-                            className={`cursor-pointer p-4 rounded-xl border-2 transition-all duration-200 shadow-sm flex items-center space-x-4 
-                                ${duration === item ? "bg-emerald-100 border-emerald-600 ring-4 ring-emerald-200" : "bg-white border-gray-300 hover:border-emerald-600"}
-                            `}
-                            onClick={() => setDuration(item)}
-                        >
-                            <span className="text-xl">{}</span>
-                            <span className="font-medium text-lg text-gray-800">{item}</span>
-                        </div>
-                    ))}
-                    
-                    {duration === "Other" && (
-                        <div className="mt-2">
-                            <input
-                                type="text"
-                                placeholder="Nhập thời gian cụ thể (ví dụ: 4 tháng)"
-                                className="p-3 border-2 border-dashed border-gray-400 rounded-lg shadow-sm w-full focus:ring-emerald-500 focus:border-emerald-500 transition duration-150 text-lg font-medium"
-                                value={customDuration}
-                                onChange={(e) => setCustomDuration(e.target.value)}
-                                autoFocus
-                            />
-                        </div>
-                    )}
-                </div>
-            ),
+            title: "2. What is your target time frame?", 
+            content: renderOptions(stepOptions.duration, duration, setDuration, setCustomDuration, customDuration, "Enter duration (e.g., 4 months)"),
         },
-        // BƯỚC 3: YẾU TỐ THIẾU TỰ TIN NHẤT
         {
-            title: "3. Which factor makes you feel the least confident when speaking?", 
-            content: (
-                <div className="grid grid-cols-2 gap-4">
-                    {confidenceBarrierOptions.map(({ item}) => (
-                        <div
-                            key={item}
-                            className={`cursor-pointer p-4 rounded-xl border-2 transition-all duration-200 shadow-sm flex flex-col items-center justify-center text-center 
-                                ${barrier === item ? "bg-emerald-100 border-emerald-600 ring-4 ring-emerald-200" : "bg-white border-gray-300 hover:border-emerald-600 hover:scale-[1.01]"}
-                            `}
-                            onClick={() => setBarrier(item)}
-                        >
-                            <span className="text-3xl mb-1">{}</span>
-                            <p className="font-semibold text-lg text-gray-800">{item}</p>
-                        </div>
-                    ))}
-                    
-                    {barrier ==="Other" && (
-                        <div className="col-span-2 mt-2">
-                            <input
-                                type="text"
-                                placeholder="Nhập yếu tố cụ thể (ví dụ: Thiếu tự nhiên)"
-                                className="p-3 border-2 border-dashed border-gray-400 rounded-lg shadow-sm w-full focus:ring-emerald-500 focus:border-emerald-500 transition duration-150 text-lg font-medium"
-                                value={customBarrier}
-                                onChange={(e) => setCustomBarrier(e.target.value)}
-                                autoFocus
-                            />
-                        </div>
-                    )}
-                </div>
-            ),
+            title: "3. What is your biggest barrier?", 
+            content: renderOptions(stepOptions.barrier, barrier, setBarrier, setCustomBarrier, customBarrier, "Enter specific barrier..."),
         },
-        // BƯỚC 4: THỜI GIAN HỌC MỖI NGÀY
         {
-            title: "4. How much focused study time can you commit each day?",
-            content: (
-                <div className="grid grid-cols-2 gap-4">
-                    {dailyTimeOptions.map(({ item }) => (
-                        <div
-                            key={item}
-                            className={`cursor-pointer p-4 rounded-xl border-2 transition-all duration-200 shadow-sm flex flex-col items-center justify-center text-center 
-                                ${dailyTime === item ? "bg-emerald-100 border-emerald-600 ring-4 ring-emerald-200" : "bg-white border-gray-300 hover:border-emerald-600 hover:scale-[1.01]"}
-                            `}
-                            onClick={() => setDailyTime(item)}
-                        >
-                            <span className="text-3xl mb-1">{}</span>
-                            <p className="font-semibold text-lg text-gray-800">{item}</p>
-                        </div>
-                    ))}
-                    
-                    {dailyTime === "Other" && (
-                        <div className="col-span-2 mt-2">
-                            <input
-                                type="text"
-                                placeholder="Enter a specific duration (e.g., 90 minutes)"
-                                className="p-3 border-2 border-dashed border-gray-400 rounded-lg shadow-sm w-full focus:ring-emerald-500 focus:border-emerald-500 transition duration-150 text-lg font-medium"
-                                value={customDailyTime}
-                                onChange={(e) => setCustomDailyTime(e.target.value)}
-                                autoFocus
-                            />
-                        </div>
-                    )}
-                </div>
-            ),
+            title: "4. Daily focused study time?",
+            content: renderOptions(stepOptions.dailyTime, dailyTime, setDailyTime, setCustomDailyTime, customDailyTime, "Enter time (e.g., 90 mins)"),
         },
     ];
 
-    // --- STEP NAVIGATION LOGIC ---
-
     const nextStep = () => {
-        // Validation cho BƯỚC 1 (Goal)
-        if (step === 1) {
-            if (!goal || (goal === "Other" && customGoal.trim() === "")) {
-                toast.error("Please select or enter your communication goal.");
-                return;
-            }
-        }
-        // Validation cho BƯỚC 2 (Duration)
-        if (step === 2) {
-            if (!duration || (duration === "Other" && customDuration.trim() === "")) {
-                toast.error("Please select your target duration.");
-                return;
-            }
-        }
-        // Validation cho Bước 3 (Barrier)
-        if (step === 3) { 
-            if (!barrier || (barrier === "Other" && customBarrier.trim() === "")) {
-                toast.error("Please select the factor that affects your confidence.");
-                return;
-            }
-        }
-        // Validation cho Bước 4 (Daily Time)
-        if (step === 4 && dailyTime === "Other" && customDailyTime.trim() === "") {
-            toast.error("Please enter your specific daily study time.");
+        const validateStep = () => {
+            if (step === 1) return goal && (goal !== "Other" || customGoal.trim() !== "");
+            if (step === 2) return duration && (duration !== "Other" || customDuration.trim() !== "");
+            if (step === 3) return barrier && (barrier !== "Other" || customBarrier.trim() !== "");
+            if (step === 4) return dailyTime && (dailyTime !== "Other" || customDailyTime.trim() !== "");
+            return false;
+        };
+
+        if (!validateStep()) {
+            toast.error("Please complete the selection.");
             return;
         }
         
@@ -309,30 +217,12 @@ export default function PreferencesPage() {
         }, 200);
     };
     
-    // Logic để vô hiệu hóa nút "Tiếp theo" và nút "Hoàn tất" khi đang submit
     const isNextDisabled = () => {
         if (isSubmitting) return true; 
-        
-        if (step === 1) { // Goal
-            if (!goal) return true;
-            if (goal === "Other" && customGoal.trim() === "") return true;
-            return false;
-        }
-        if (step === 2) { // Duration
-            if (!duration) return true;
-            if (duration === "Other" && customDuration.trim() === "") return true;
-            return false;
-        }
-        if (step === 3) { // Barrier
-            if (!barrier) return true;
-            if (barrier === "Other" && customBarrier.trim() === "") return true;
-            return false;
-        }
-        if (step === 4) { // Daily Time
-            if (!dailyTime) return true;
-            if (dailyTime === "Other" && customDailyTime.trim() === "") return true;
-            return false;
-        }
+        if (step === 1) return !(goal && (goal !== "Other" || customGoal.trim() !== ""));
+        if (step === 2) return !(duration && (duration !== "Other" || customDuration.trim() !== ""));
+        if (step === 3) return !(barrier && (barrier !== "Other" || customBarrier.trim() !== ""));
+        if (step === 4) return !(dailyTime && (dailyTime !== "Other" || customDailyTime.trim() !== ""));
         return false;
     };
     
@@ -345,63 +235,81 @@ export default function PreferencesPage() {
     };
 
     const contentToRender = stepsContent[step - 1]; 
+    
+    const LoadingModal = () => (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-gray-900/50 backdrop-blur-sm transition-all">
+            <div className="bg-white p-8 rounded-2xl shadow-2xl flex flex-col items-center max-w-sm text-center border border-gray-100">
+                <Loader2 className="w-12 h-12 text-blue-600 animate-spin mb-6" />
+                <h3 className="text-xl font-bold text-gray-900 mb-2">Personalizing Your Path...</h3>
+                <p className="text-gray-500">Our AI is analyzing your preferences to build the perfect diagnostic test.</p>
+            </div>
+        </div>
+    );
 
     return (
-        <div className="min-h-screen bg-gray-100 relative"> 
-            {isSubmitting && (
-                <LoadingModal 
-                    title="Đang tạo bài test..."
-                    message="The AI system is analyzing your data."
-                />
-                )}
+        <div className="min-h-screen relative bg-gradient-to-br from-[#F9F4EF] via-[#F4FFFB] to-[#E6ECFF] flex flex-col"> 
+            {isSubmitting && <LoadingModal />}
 
-            <div className={`transition-opacity duration-300 ${isSubmitting ? "opacity-70 pointer-events-none" : ""}`}>
+            <div className="absolute top-0 right-0 w-[500px] h-[500px] bg-blue-400/10 rounded-full blur-3xl animate-pulse -z-10"></div>
+            <div className="absolute bottom-0 left-0 w-[400px] h-[400px] bg-cyan-400/10 rounded-full blur-3xl animate-pulse delay-1000 -z-10"></div>
+
+            <div className={`flex-1 flex flex-col justify-center items-center py-10 px-4 sm:px-6 transition-opacity duration-300 ${isSubmitting ? "opacity-50 pointer-events-none" : ""}`}>
                 
-                <div className="flex justify-center items-center p-6 mt-10">
-                    <div className="bg-white shadow-xl rounded-2xl p-8 w-full max-w-2xl">
-                        
-                        <h1 className="text-3xl font-bold text-center text-emerald-700 mb-6">Personalize your learning goals</h1>
-                        
-                        {/* Thanh Tiến Trình BƯỚC */}
-                        <div className="mb-8">
-                            <div className="h-2 bg-gray-200 rounded-full">
-                                <div 
-                                    className="h-full bg-emerald-500 rounded-full transition-all duration-500"
-                                    style={{ width: `${(step / stepsContent.length) * 100}%` }}
-                                ></div>
-                            </div>
-                            <p className="text-center text-sm text-gray-500 mt-2 font-medium">Step {step} of {stepsContent.length}</p>
+                <div className="bg-white/80 backdrop-blur-xl shadow-2xl rounded-3xl p-8 md:p-12 w-full max-w-3xl border border-white/60">
+                    
+                    <div className="text-center mb-10">
+                        <h1 className="text-3xl md:text-4xl font-black text-gray-900 mb-3 tracking-tight">Setup Your Profile</h1>
+                        <p className="text-gray-500 text-lg">Let us customize your learning experience.</p>
+                    </div>
+                    
+                    <div className="mb-12 relative">
+                        <div className="h-3 bg-gray-100 rounded-full overflow-hidden">
+                            <div 
+                                className="h-full bg-blue-600 rounded-full transition-all duration-500 ease-out"
+                                style={{ width: `${(step / stepsContent.length) * 100}%` }}
+                            ></div>
+                        </div>
+                        <div className="flex justify-between mt-2 text-xs font-bold text-gray-400 uppercase tracking-wider">
+                            <span>Start</span>
+                            <span>Finish</span>
+                        </div>
+                    </div>
+
+                    <div className={`min-h-[300px] flex flex-col justify-between transition-opacity duration-300 ${fade ? "opacity-100" : "opacity-0"}`}>
+                        <div>
+                            <h2 className="font-extrabold mb-8 text-2xl md:text-3xl text-gray-900 leading-tight">
+                                {contentToRender.title}
+                            </h2>
+                            {contentToRender.content}
                         </div>
 
-
-                        <div className={`transition-opacity duration-300 ${fade ? "opacity-100" : "opacity-0"}`}>
-                            <h2 className="font-bold mb-6 text-2xl text-gray-800 border-b pb-3">{contentToRender.title}</h2>
-                            {contentToRender.content}
-
-                            <div className="mt-8 flex justify-between">
-                                {step > 1 && (
+                        <div className="mt-12 flex justify-between items-center pt-6 border-t border-gray-100">
+                            <div>
+                                {step > 1 ? (
                                     <button 
                                         onClick={prevStep} 
-                                        disabled={isSubmitting} // Khóa nút quay lại khi đang gửi
-                                        className="bg-gray-300 text-gray-800 px-6 py-2 rounded-lg font-semibold hover:bg-gray-400 transition-colors"
+                                        disabled={isSubmitting} 
+                                        className="flex items-center gap-2 text-gray-500 hover:text-gray-900 px-4 py-2 rounded-lg font-bold transition-colors"
                                     >
-                                         Go back
+                                        <ArrowLeft className="w-5 h-5"/> Back
                                     </button>
-                                )}
-                                {step === 1 && <div />}
-                                
-                                <button
-                                    onClick={handleNext}
-                                    disabled={isNextDisabled()}
-                                    className={`px-6 py-2 rounded-lg font-semibold shadow-md transition-colors 
-                                        ${isNextDisabled() ? 'bg-gray-300 text-gray-500 cursor-not-allowed' : 'bg-emerald-600 text-white hover:bg-emerald-700'}`}
-                                >
-                                    {isSubmitting 
-                                        ? 'Creating...' 
-                                        : (step < stepsContent.length ? 'Next' : 'Finish')
-                                    }
-                                </button>
+                                ) : <div />}
                             </div>
+                            
+                            <button
+                                onClick={handleNext}
+                                disabled={isNextDisabled()}
+                                className={`flex items-center gap-2 px-8 py-3.5 rounded-xl font-bold shadow-lg transition-all duration-300 transform active:scale-[0.98]
+                                    ${isNextDisabled() 
+                                        ? 'bg-gray-200 text-gray-400 cursor-not-allowed shadow-none' 
+                                        : 'bg-blue-600 text-white hover:bg-blue-700 hover:shadow-blue-600/30'}
+                                `}
+                            >
+                                {isSubmitting 
+                                    ? <>Processing...</>
+                                    : (step < stepsContent.length ? <>Next <ArrowRight className="w-5 h-5"/></> : <>Finish <Target className="w-5 h-5"/></>)
+                                }
+                            </button>
                         </div>
                     </div>
                 </div>
