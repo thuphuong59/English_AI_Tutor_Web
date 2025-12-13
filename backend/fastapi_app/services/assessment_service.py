@@ -161,7 +161,9 @@ def initialize_user_progress(learning_phases: List[Dict[str, Any]]) -> Dict[str,
                             user_progress[lesson_id] = {
                                 "completed": False, 
                                 "score": None,
-                                "type": skill_type # Lưu loại kỹ năng để dễ truy vấn sau này
+                                "type": skill_type, # Lưu loại kỹ năng để dễ truy vấn sau này
+                                "attempt_count": 0,
+                                "status": "PENDING"
                             }
                             
     return user_progress

@@ -78,6 +78,8 @@ async def start_topic(
         return existing_deck
 
     # 2. Gọi Service tạo Deck mới
+    print("🔥 topic_req.lesson_id =", topic_req.lesson_id)
+
     new_deck = await vocabulary.create_new_deck(user_id, topic_req.topic_name,topic_req.lesson_id)
     if not new_deck:
         raise HTTPException(status_code=500, detail="Không thể tạo bộ từ")

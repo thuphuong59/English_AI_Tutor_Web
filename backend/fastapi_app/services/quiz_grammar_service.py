@@ -139,7 +139,8 @@ async def generate_quiz_questions(session_id: int, topic_name: str, user_id: str
 # GRADE & TRACK
 # ============================
 logger = logging.getLogger(__name__)
-MASTERY_THRESHOLD = 0.20 # 80% điểm trở lên được coi là thành thạo
+MASTERY_THRESHOLD = 0.80 # 80% điểm trở lên được coi là thành thạo
+MAX_ATTEMPTS = 4
 
 async def grade_and_track_quiz(session_id: int, user_id: str, answers: Dict[int, str]):
     user_id
@@ -205,11 +206,11 @@ async def grade_and_track_quiz(session_id: int, user_id: str, answers: Dict[int,
             session_info = admin_supabase.table("QuizSessions") \
                 .select("topic").eq("id", session_id).single().execute()
 
-            admin_supabase.table("CompletedTopics").insert({
-                "user_id": user_id,
-                "lesson_id": session_info.data["topic"], # "topic" là lesson_id trong context này
-                "topic_type": "grammar"
-            }).execute()
+            # admin_supabase.table("CompletedTopics").upsert({
+            #     "user_id": user_id,
+            #     "lesson_id": session_info.data["topic"], 
+            #     "topic_type": "grammar",
+            # }).select('id').execute({'on_conflict': 'user_id,lesson_id'})
             
             roadmap_record = get_user_roadmap(user_id)
             logger.debug(f"DEBUG: Loaded Roadmap ID: {roadmap_record.get('id')}")
@@ -223,14 +224,47 @@ async def grade_and_track_quiz(session_id: int, user_id: str, answers: Dict[int,
                 current_progress = current_roadmap_data.get('user_progress', {})
                 roadmap_id = roadmap_record.get('id')
 
-                # 4a. Cập nhật trạng thái của lesson_id đó
+                # 4a. CẬP NHẬT TRẠNG THÁI CỦA LESSON (TÍCH HỢP LƯỢT THỬ VÀ STATUS)
                 if lesson_id_to_mark in current_progress:
+                    task_progress = current_progress.get(lesson_id_to_mark, {})
+                    
+                    # 1. Tính lượt thử mới
+                    current_attempt = task_progress.get("attempt_count", 0) + 1
+                    
+                    # 2. Xác định trạng thái mới
+                    new_status = "PENDING" 
+                    new_completed = False 
+                    
+                    if mastery_achieved:
+                        new_completed = True
+                        new_status = "SUCCESS"
+                    elif current_attempt >= MAX_ATTEMPTS:
+                        # Đã hết lượt thử và không đạt Mastery
+                        new_completed = False
+                        new_status = "END_OF_ATTEMPTS"
+                    else:
+                        # Thất bại, nhưng vẫn còn lượt thử
+                        new_completed = False
+                        new_status = "PENDING"
+                        
+                    # 3. Gán lại vào current_progress
                     current_progress[lesson_id_to_mark] = {
-                        "completed": mastery_achieved, # Chỉ TRUE nếu đạt 80%
-                        "score": round(score * 100), # Lưu điểm dưới dạng %
-                        "type": "grammar"
+                        **task_progress,  # Giữ lại các trường như 'type' đã khởi tạo
+                        "completed": new_completed,
+                        "score": round(score * 100),
+                        "attempt_count": current_attempt, 
+                        "status": new_status              
                     }
-                    current_roadmap_data['user_progress'] = current_progress # Cập nhật lại đối tượng userProgress
+                    # current_roadmap_data['user_progress'] = current_progress 
+
+                    # # 4. KIỂM TRA HOÀN THÀNH TUẦN VÀ KÍCH HOẠT TÁI ĐÁNH GIÁ
+                    # week_id = get_week_id_from_lesson_id(lesson_id_to_mark) 
+                    
+                    # if week_id and check_week_completion(current_progress, week_id):
+                    #     logger.info(f"🚨 WEEK {week_id} COMPLETED/RESOLVED. KÍCH HOẠT weekly_assessment.")
+                    #     # GỌI HÀM CẬP NHẬT ROADMAP:
+                    #     await weekly_assessment(user_id, current_roadmap_data) 
+                        
                 else:
                     logger.warning(f"Lesson ID {lesson_id_to_mark} not found in userProgress map.")
 
@@ -241,15 +275,14 @@ async def grade_and_track_quiz(session_id: int, user_id: str, answers: Dict[int,
                         .eq("id", roadmap_id) \
                         .execute()
                     
-                    logger.info(f"✅ [PROGRESS TRACKED] Grammar {lesson_id_to_mark} updated in roadmaps.")
+                    logger.info(f"✅ [PROGRESS TRACKED] Grammar {lesson_id_to_mark} updated (Status: {new_status}).")
 
-            else:
-                logger.warning(f"Roadmap not found for user {user_id} to update progress.")
+                else:
+                    logger.warning(f"Roadmap not found for user {user_id} to update progress.")
 
         except Exception as e:
             logger.error(f"❌ Lỗi khi cập nhật progress cho Grammar: {e}")
-            # Vẫn cho phép giao dịch chính hoàn tất
-    
+            
     
     return {
         "score_percent": score,

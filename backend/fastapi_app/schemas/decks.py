@@ -115,7 +115,7 @@ class QuizResultCreate(BaseModel):
 class TopicRequest(BaseModel):
     """Schema dùng cho input khi người dùng click START topic"""
     topic_name: str
-    lesson_id: Optional[str] = Field(None, alias="lessonId")  
+    lesson_id: Optional[str] = None
 
     class Config:
         allow_population_by_field_name = True
