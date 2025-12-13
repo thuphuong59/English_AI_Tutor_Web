@@ -15,9 +15,7 @@ interface ChatInputProps {
     disabled: boolean;
 }
 
-
 type Status = "idle" | "recording" | "reviewing";
-
 
 const ChatInput: FC<ChatInputProps> = ({
     input,
@@ -32,12 +30,10 @@ const ChatInput: FC<ChatInputProps> = ({
     const [recordingTime, setRecordingTime] = useState(0);
     const [audioPreview, setAudioPreview] = useState<{ blob: Blob; url: string } | null>(null);
 
-
     const mediaRecorderRef = useRef<MediaRecorder | null>(null);
     const audioChunksRef = useRef<Blob[]>([]);
     const timerRef = useRef<NodeJS.Timeout | null>(null);
     const audioPlayerRef = useRef<HTMLAudioElement | null>(null);
-
 
     // ================= CLEANUP =================
     useEffect(() => {
@@ -47,25 +43,20 @@ const ChatInput: FC<ChatInputProps> = ({
         };
     }, [audioPreview]);
 
-
     // ================= RECORDING =================
     const startRecording = async () => {
         if (loading || disabled || status !== "idle") return;
-
 
         try {
             const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
             const recorder = new MediaRecorder(stream);
 
-
             mediaRecorderRef.current = recorder;
             audioChunksRef.current = [];
-
 
             recorder.ondataavailable = (e) => {
                 if (e.data.size > 0) audioChunksRef.current.push(e.data);
             };
-
 
             recorder.onstop = () => {
                 stream.getTracks().forEach((t) => t.stop());
@@ -77,21 +68,17 @@ const ChatInput: FC<ChatInputProps> = ({
                     return;
                 }
 
-
                 const blob = new Blob(audioChunksRef.current, { type: recorder.mimeType });
                 const url = URL.createObjectURL(blob);
-
 
                 setAudioPreview({ blob, url });
                 setRecordingTime(0);
                 setStatus("reviewing");
             };
 
-
             recorder.start();
             setStatus("recording");
             setRecordingTime(0);
-
 
             timerRef.current = setInterval(() => {
                 setRecordingTime((t) => t + 1);
@@ -114,10 +101,8 @@ const ChatInput: FC<ChatInputProps> = ({
     const handleSendAudio = async () => {
         if (!audioPreview || loading || disabled) return;
 
-
         audioPlayerRef.current?.pause();
         await onVoiceMessage(audioPreview.blob, audioPreview.url);
-
 
         URL.revokeObjectURL(audioPreview.url);
         setAudioPreview(null);
@@ -134,12 +119,10 @@ const ChatInput: FC<ChatInputProps> = ({
         setStatus("idle");
     };
 
-
     // ================= INPUT =================
     const handleKeyDown = (e: KeyboardEvent<HTMLInputElement>) => {
         if (e.key === "Enter" && !e.shiftKey) {
             e.preventDefault();
-
 
             if (
                 input.trim() &&
@@ -153,21 +136,17 @@ const ChatInput: FC<ChatInputProps> = ({
         }
     };
 
-
     const formatTime = (sec: number) => {
         const m = Math.floor(sec / 60);
         const s = sec % 60;
         return `${m}:${s < 10 ? "0" : ""}${s}`;
     };
 
-
     const isInputDisabled = loading || disabled || status !== "idle";
     const isSendDisabled =
         isInputDisabled || !input.trim() || mode !== "free";
 
-
     // ================= UI =================
-
 
     //  RECORDING
     if (status === "recording") {
@@ -184,7 +163,6 @@ const ChatInput: FC<ChatInputProps> = ({
                     <span className="text-red-400 text-xs">Recording...</span>
                 </div>
 
-
                 <button
                     onClick={stopRecording}
                     className="bg-white text-red-500 p-2 rounded-full hover:bg-red-100"
@@ -194,7 +172,6 @@ const ChatInput: FC<ChatInputProps> = ({
             </div>
         );
     }
-
 
     //  REVIEW
     if (status === "reviewing" && audioPreview) {
@@ -207,14 +184,12 @@ const ChatInput: FC<ChatInputProps> = ({
                     <X size={18} />
                 </button>
 
-
                 <audio
                     ref={audioPlayerRef}
                     src={audioPreview.url}
                     controls
                     className="h-8 max-w-[220px]"
                 />
-
 
                 <button
                     onClick={handleSendAudio}
@@ -230,7 +205,6 @@ const ChatInput: FC<ChatInputProps> = ({
             </div>
         );
     }
-
 
     //  NORMAL INPUT
     return (
@@ -257,7 +231,6 @@ const ChatInput: FC<ChatInputProps> = ({
                     className="flex-1 bg-transparent outline-none text-sm"
                 />
 
-
                 {input.trim() && mode === "free" && (
                     <button
                         onClick={onSend}
@@ -276,7 +249,6 @@ const ChatInput: FC<ChatInputProps> = ({
                     </button>
                 )}
             </div>
-
 
             {!input.trim() && (
                 <button
@@ -300,6 +272,5 @@ const ChatInput: FC<ChatInputProps> = ({
         </div>
     );
 };
-
 
 export default ChatInput;
