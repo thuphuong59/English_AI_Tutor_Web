@@ -119,6 +119,7 @@ Learner information:
     Speaking tasks must be practical and recordable.
 
     Expected outcomes must be measurable (speaking duration, number of errors, fluency level...).
-
+    All text values in the returned JSON MUST be written in English only.
+    Do NOT use Vietnamese or any other language.
     Start immediately with the JSON, no additional text.
     """
