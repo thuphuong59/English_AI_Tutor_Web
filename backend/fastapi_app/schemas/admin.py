@@ -13,7 +13,7 @@ class UpdateUserRole(BaseModel):
 class AdminUserDetail(BaseModel):
     id: str = Field(alias='user_id') 
     username: str
-    
+    avatar_url: Optional[str] = None
     # Các trường mặc định
     role: str = Field(default='user')
     status: str = Field(default='active')
@@ -28,6 +28,12 @@ class AdminUserDetail(BaseModel):
 
     class Config:
         populate_by_name = True 
+        
+class AdminUserUpdate(BaseModel):
+    username: Optional[str] = None
+    role: Optional[str] = None # 'admin' hoặc 'user'
+    status: Optional[str] = None # 'active' hoặc 'blocked'
+    badge: Optional[int] = None
 
 # --- Session Overview Response (MỚI THÊM) ---
 class SessionOverview(BaseModel):

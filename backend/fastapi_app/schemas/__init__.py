@@ -67,5 +67,6 @@ from .admin import (
     UpdateUserRole,
     SessionOverview,
     MessageDetail,
-    SessionDetail
+    SessionDetail,
+    AdminUserUpdate
 )

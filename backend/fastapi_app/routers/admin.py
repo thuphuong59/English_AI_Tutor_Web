@@ -1,9 +1,9 @@
-from fastapi import APIRouter, Depends, HTTPException
-from typing import List
+from fastapi import APIRouter, Depends, HTTPException, Query
+from typing import List, Optional
 from ..dependencies import get_admin_user_id
 from ..database import admin_supabase,db_client
 from ..crud import admin_users as admin_crud
-from ..schemas.admin import MessageDetail, SessionDetail, SessionOverview
+from ..schemas.admin import AdminUserUpdate, MessageDetail, SessionDetail, SessionOverview
 from ..schemas.admin import AdminUserDetail, UpdateUserStatus, UpdateUserRole
 
 router = APIRouter(
@@ -13,10 +13,11 @@ router = APIRouter(
 )
 
 @router.get("/users", response_model=List[AdminUserDetail])
-async def list_users():
+async def list_users(search: Optional[str] = Query(None)): # Nhận tham số search từ URL
+    """Lấy danh sách user, hỗ trợ tìm kiếm."""
     try:
-        users_data = admin_crud.get_all_user_details(db=admin_supabase)
-        # Pydantic sẽ tự map 'id' từ DB sang 'id' (alias user_id) trong schema
+        # Truyền search vào CRUD
+        users_data = admin_crud.get_all_user_details(db=db_client, search_query=search)
         return [AdminUserDetail(**u) for u in users_data]
     except Exception as e:
         print(f"API Error (list_users): {e}")
@@ -84,3 +85,17 @@ async def get_session_detail(session_id: str):
         overview=SessionOverview(**overview_data), # Map data vào schema
         messages=[MessageDetail(**m) for m in messages_data]
     )
+@router.put("/users/{user_id}")
+async def update_user(user_id: str, user_data: AdminUserUpdate):
+    """Cập nhật thông tin user (Username, Role, Status, Badge)"""
+    try:
+        updated_user = admin_crud.update_user_in_db(db=db_client, user_id=user_id, update_data=user_data)
+        
+        if not updated_user:
+            raise HTTPException(status_code=404, detail="User not found or update failed.")
+            
+        return {"message": "User updated successfully", "data": updated_user}
+        
+    except Exception as e:
+        print(f"API Error: {e}")
+        raise HTTPException(status_code=500, detail="Internal Server Error")

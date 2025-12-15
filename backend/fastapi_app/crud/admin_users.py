@@ -1,22 +1,31 @@
-from typing import List, Dict, Any
+from typing import List, Dict, Any, Optional
 from postgrest.base_request_builder import SingleAPIResponse
-from ..schemas.admin import UpdateUserStatus, UpdateUserRole 
+from ..schemas.admin import AdminUserUpdate, UpdateUserStatus, UpdateUserRole 
 
 # Tên bảng chính xác trong Supabase
 USER_PROFILES_TABLE = 'profiles' 
 
-def get_all_user_details(db: Any) -> List[Dict[str, Any]]:
-    """Lấy danh sách người dùng."""
+def get_all_user_details(db: Any, search_query: Optional[str] = None) -> List[Dict[str, Any]]:
     try:
-        # Select updated_at khớp với DB thực tế
-        response = db.from_(USER_PROFILES_TABLE).select(
-            "id, username, updated_at, badge, last_login_date, role, status"
-        ).execute()
+        # 1. Bắt đầu query cơ bản
+        query = db.from_(USER_PROFILES_TABLE).select(
+            "id, username, avatar_url, updated_at, badge, last_login_date, role, status"
+        )
+        
+        # 2. Nếu có từ khóa tìm kiếm -> Thêm bộ lọc
+        if search_query:
+            # Tìm kiếm theo username (không phân biệt hoa thường - ilike)
+            # Hoặc tìm theo ID (nếu khớp chính xác)
+            # Cú pháp Supabase: or=(col1.ilike.val,col2.eq.val)
+            # Ở đây ta ưu tiên tìm theo username cho đơn giản và hiệu quả
+            query = query.ilike("username", f"%{search_query}%")
+            
+        # 3. Thực thi
+        response = query.execute()
         user_data = response.data
         
-        # Bổ sung session_count
+        # 4. Lấy session count (Logic giữ nguyên)
         for user in user_data:
-            # Lưu ý: user['id'] là UUID từ bảng profiles
             session_resp = db.from_('conversation_sessions').select('*', count='exact').eq("user_id", user['id']).execute()
             user['session_count'] = session_resp.count if session_resp.count is not None else 0
             
@@ -126,3 +135,26 @@ def get_session_overview(db: Any, session_id: str) -> Dict[str, Any]:
         return response.data
     except Exception as e:
         return None
+    
+def update_user_in_db(db: Any, user_id: str, update_data: AdminUserUpdate) -> Dict[str, Any]:
+    try:
+        # 1. Chuyển Pydantic model thành dict và loại bỏ các trường None (không gửi lên)
+        data_to_update = update_data.model_dump(exclude_unset=True)
+        
+        if not data_to_update:
+            return None # Không có gì để update
+
+        # 2. Thực hiện Update vào bảng profiles
+        response = db.from_(USER_PROFILES_TABLE)\
+            .update(data_to_update)\
+            .eq("id", user_id)\
+            .execute()
+            
+        # Trả về dữ liệu sau khi update (nếu thành công)
+        if response.data:
+            return response.data[0]
+        return None
+        
+    except Exception as e:
+        print(f"DB Error (update_user_in_db): {e}")
+        raise e
