@@ -14,3 +14,9 @@ class UserResponse(BaseModel):
     id: str
     email: str
     username: Optional[str] = None
+    
+class TokenResponse(BaseModel):
+    access_token: str
+    token_type: str
+    user_id: str
+    user_role: str # Thêm trường role để Frontend có thể chuyển hướng

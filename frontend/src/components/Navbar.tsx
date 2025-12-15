@@ -5,11 +5,18 @@ import { useState } from "react";
 import { useUser } from "@/app/settings/UserContext";
 import { logoutUser } from "@/services/authService";
 import { FiLogOut, FiSettings, FiUser, FiMenu, FiX } from "react-icons/fi";
+import { usePathname } from "next/navigation"; // <--- 1. IMPORT HOOK NÀY
 
 export default function Navbar() {
   const { user, refreshUser } = useUser();
   const [menuOpen, setMenuOpen] = useState(false);
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
+  const pathname = usePathname(); // <--- 2. LẤY PATHNAME HIỆN TẠI
+
+  // <--- 3. LOGIC QUAN TRỌNG: ẨN NAVBAR NẾU ĐANG Ở TRANG ADMIN --->
+  if (pathname?.startsWith("/admin")) {
+    return null;
+  }
 
   const username =
     user?.username ||
