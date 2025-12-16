@@ -178,24 +178,28 @@ async def evaluate_scenario_voice(audio: UploadFile, scenario_id: str, level: st
 # --- SUMMARIZE ---
 
 # Hàm hỗ trợ tính điểm trung bình (Chỉ tính các điểm số có giá trị)
-def calculate_average_score(metadata: Dict[str, Any]) -> float:
+def calculate_overall_speaking_score(metadata: Dict[str, Any]) -> float:
+    """
+    Tính overall_score cho Speaking roadmap.
+    - Chỉ lấy các skill có giá trị số
+    - Bỏ qua skill = null
+    - Trả về score chuẩn hóa 0.0 → 1.0
+    """
     scores = []
-    
-    grammar_score = metadata.get("grammar")
-    vocabulary_score = metadata.get("vocabulary")
-    pronunciation_score = metadata.get("pronunciation")
-    
-    # Chỉ thêm vào list nếu giá trị là số (float hoặc int)
-    if isinstance(grammar_score, (float, int)) and grammar_score is not None:
-        scores.append(grammar_score)
-    if isinstance(vocabulary_score, (float, int)) and vocabulary_score is not None:
-        scores.append(vocabulary_score)
-    if isinstance(pronunciation_score, (float, int)) and pronunciation_score is not None:
-        scores.append(pronunciation_score)
-        
-    if scores:
-        return sum(scores) / len(scores)
-    return 0.0
+
+    for key in ("grammar", "vocabulary", "pronunciation"):
+        value = metadata.get(key)
+        if isinstance(value, (int, float)):
+            scores.append(float(value))
+
+    if not scores:
+        return 0.0
+
+    overall = sum(scores) / len(scores)
+
+    # Clamp an toàn
+    return max(0.0, min(overall, 1.0))
+
 
 logger = logging.getLogger(__name__)
 CONVERSATION_MASTERY_THRESHOLD = 0.80 
@@ -265,13 +269,16 @@ async def summarize_conversation(session_id: str, topic: str, level: str, messag
 
 
     if lesson_id_to_mark and user_id and mode in ["free", "scenario"] and not session_already_summarized:
-            
+                
             summary_metadata = parsed.get("summary_metadata", {})
-            overall_score = calculate_average_score(summary_metadata) # Tính trung bình 3 điểm (Giả định CONVERSATION_MASTERY_THRESHOLD tồn tại)
-            mastery_achieved = overall_score >= CONVERSATION_MASTERY_THRESHOLD
 
+            # TÍNH ĐIỂM TỔNG HỢP
+            overall_score = calculate_overall_speaking_score(summary_metadata) 
+            overall_score = float(overall_score)
+            overall_score = max(0.0, min(overall_score, 1.0))
+            mastery_achieved = overall_score >= CONVERSATION_MASTERY_THRESHOLD
             try:
-                # 4. Lấy bản ghi Roadmap hiện tại
+            # 4. Lấy bản ghi Roadmap hiện tại
                 roadmap_record = await anyio.to_thread.run_sync(
                     assessment_service.get_user_roadmap, 
                     user_id 
@@ -288,7 +295,7 @@ async def summarize_conversation(session_id: str, topic: str, level: str, messag
                     current_attempt = task_progress.get("attempt_count", 0) + 1
                     
                     # Xác định trạng thái mới
-                    new_status = "PENDING"
+                    new_completed = False 
                     if mastery_achieved:
                         new_completed = True
                         new_status = "SUCCESS"
@@ -299,50 +306,80 @@ async def summarize_conversation(session_id: str, topic: str, level: str, messag
                         new_completed = False
                         new_status = "PENDING"
 
-                    # 5b. Cập nhật trạng thái của lesson_id đó
-                    score_percentage = round(overall_score * 100)
-                    
+                # 5b. Cập nhật trạng thái của lesson_id đó
                     update_data = {
                         **task_progress,
                         "completed": new_completed, 
-                        "score": score_percentage, 
-                        "attempt_count": current_attempt, # 🚨 TRƯỜNG MỚI
-                        "status": new_status,              # 🚨 TRƯỜNG MỚI
+                        "score": round(float(overall_score), 2),
+                        "attempt_count": current_attempt,
+                        "status": new_status,
                         "type": "speaking" 
                     }
 
-                    current_progress[lesson_id_to_mark] = update_data
-                    current_roadmap_data['user_progress'] = current_progress
+                current_progress[lesson_id_to_mark] = update_data
+                current_roadmap_data['user_progress'] = current_progress
 
-                    # 6. Lưu lại toàn bộ bản ghi roadmaps
-                    if roadmap_id:
-                        # 🚨 SỬA LỖI CÚ PHÁP run_sync: Gọi execute() bên trong hàm đồng bộ
-                        def db_update_sync():
-                            return admin_supabase.table("roadmaps") \
-                                .update({"data": current_roadmap_data}) \
-                                .eq("id", roadmap_id) \
-                                .execute()
-                                
-                        await anyio.to_thread.run_sync(db_update_sync)
+                # 6. Lưu lại toàn bộ bản ghi roadmaps
+                if roadmap_id:
+                    def db_update_sync():
+                        return admin_supabase.table("roadmaps") \
+                            .update({"data": current_roadmap_data}) \
+                            .eq("id", roadmap_id) \
+                            .execute()
+                            
+                    await anyio.to_thread.run_sync(db_update_sync)
+                    logger.info(f"✅ [PROGRESS TRACKED] Speaking {lesson_id_to_mark} updated (Status: {new_status}).")
+
+                    # ==========================================================
+                    # 🚨 BƯỚC 7: KIỂM TRA HOÀN THÀNH TUẦN VÀ KÍCH HOẠT ĐIỀU CHỈNH AI
+                    # ==========================================================
+                    try:
+                        completed_week_data = assessment_service.get_week_data_by_lesson_id(
+                            lesson_id_to_mark, 
+                            current_roadmap_data
+                        )
                         
-                        # Kiểm tra hoàn thành tuần
-                        try:
-                            week_id = assessment_service.get_week_id_from_lesson_id(lesson_id_to_mark)
-                            is_week_resolved = assessment_service.check_week_completion(current_progress, week_id) 
+                        if completed_week_data:
+                            week_number = completed_week_data.get('week_number', 'UNKNOWN')
+                            
+                            is_week_resolved = assessment_service.check_week_completion(
+                                current_progress, 
+                                completed_week_data
+                            ) 
                             
                             if is_week_resolved:
-                                # Trigger weekly assessment (Giả định assessment_service.weekly_assessment là hàm async)
-                                # await assessment_service.weekly_assessment(user_id, current_roadmap_data)
-                                logger.info(f"🚨 WEEK {week_id} COMPLETED/RESOLVED. KÍCH HOẠT weekly_assessment.")
-                                pass
-                        except Exception as e:
-                            logger.warning(f"Lỗi khi kiểm tra hoàn thành tuần (Speaking): {e}")
-                            pass
-                        
-                    # else: roadmap_id không tồn tại, bỏ qua cập nhật
+                                logger.info(f"🚨 [WEEK STATUS] Tuần {week_number} ĐÃ HOÀN TẤT. KÍCH HOẠT ĐIỀU CHỈNH AI.")
+                                summary_record = await assessment_service.create_weekly_summary_record(
+                                    user_id=user_id,
+                                    completed_week_data=completed_week_data,
+                                    current_progress=current_progress, 
+                                    admin_supabase=admin_supabase
+                                )
+                                
+                                if summary_record:
+                                    # GỌI HÀM ĐIỀU CHỈNH BẰNG AI
+                                    await assessment_service.generate_and_apply_adaptive_roadmap(
+                                        user_id,
+                                        summary_record,
+                                        current_roadmap_data,
+                                        admin_supabase
+                                    )
+                                else:
+                                    logger.error("❌ Lỗi: Không thể tạo bản ghi tóm tắt tuần.")
+                            else:
+                                logger.info(f"☑️ [WEEK STATUS] Tuần {week_number} CHƯA HOÀN TẤT. (Pending tasks remain).")
+                        else:
+                            logger.warning(f"Lesson ID {lesson_id_to_mark} not found in Roadmap structure.")
+
+                    except Exception as e:
+                        logger.warning(f"Lỗi khi kiểm tra hoàn thành tuần/điều chỉnh AI (Speaking): {e}")
+                        pass
+
+                else:
+                    logger.warning(f"Roadmap ID not found for user {user_id}. Skipping roadmap update.")
 
             except Exception as e:
-                # logger.error(f"Lỗi trong quá trình cập nhật Roadmap (Conversation): {e}")
+                logger.error(f"Lỗi trong quá trình cập nhật Roadmap (Conversation): {e}")
                 pass # Vẫn trả về parsed dù cập nhật roadmap thất bại
 
     return parsed

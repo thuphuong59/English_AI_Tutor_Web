@@ -235,16 +235,20 @@ async def process_save_quiz_result(result_data: QuizResultCreate, user_id: str):
     Xử lý logic tính toán điểm và gọi CRUD để lưu. (Không gọi Roadmap).
     """
     try:
-        # Tính phần trăm điểm
-        percentage = 0.0
+        normalized_score = 0.0
         if result_data.total_questions > 0:
-            percentage = (result_data.score / result_data.total_questions) * 100
+            normalized_score = round(
+                result_data.score / result_data.total_questions,
+                4
+            )
+
+        percentage = round(normalized_score * 100, 2)
 
         #  (Data Preparation)
         data_to_insert = {
             "user_id": user_id,
             "deck_id": result_data.deck_id,
-            "score": result_data.score,
+            "score": normalized_score,
             "total_questions": result_data.total_questions,
             "percentage": round(percentage, 2),
             "lesson_id": result_data.lesson_id # ✅ ĐÃ THÊM: Lưu lesson_id vào bảng lịch sử
@@ -340,7 +344,7 @@ async def process_quiz_completion(user_id: str, result_data: QuizResultCreate):
                 update_data = {
                     **task_progress, 
                     "completed": new_completed, 
-                    "score": round(score * 100), 
+                    "score": score, 
                     "attempt_count": current_attempt, 
                     "status": new_status              
                 }
@@ -362,19 +366,62 @@ async def process_quiz_completion(user_id: str, result_data: QuizResultCreate):
                     logger.info(f"✅ [PROGRESS TRACKED] Vocabulary {lesson_id_to_mark} updated (Status: {new_status}).")
 
                     # 5. LOGIC KIỂM TRA HOÀN THÀNH TUẦN VÀ KÍCH HOẠT ĐÁNH GIÁ LẠI
-                    # try:
-                    #     week_id = assessment_service.get_week_id_from_lesson_id(lesson_id_to_mark)
-                    #     is_week_resolved = assessment_service.check_week_completion(current_progress, week_id) 
+                    try:
+                        # 5a. Lấy dữ liệu tuần hiện tại (sử dụng hàm helper)
+                        completed_week_data = assessment_service.get_week_data_by_lesson_id(
+                            lesson_id_to_mark, 
+                            current_roadmap_data
+                        )
                         
-                    #     if is_week_resolved:
-                    #         logger.info(f"🚨 WEEK {week_id} COMPLETED/RESOLVED. KÍCH HOẠT weekly_assessment.")
-                    #         # Giả định assessment_service.weekly_assessment là hàm async
-                    #         # await assessment_service.weekly_assessment(user_id, current_roadmap_data)
-                    #         pass
-                    # except Exception as e:
-                    #     logger.warning(f"Lỗi khi kiểm tra hoàn thành tuần: {e}")
-                    #     pass
+                        if completed_week_data:
+                            week_number = completed_week_data.get('week_number', 'UNKNOWN')
 
+                            # 5b. Kiểm tra hoàn thành tuần
+                            is_week_resolved = assessment_service.check_week_completion(
+                                current_progress, 
+                                completed_week_data
+                            ) 
+                            completed_week_data = assessment_service.get_week_data_by_lesson_id(lesson_id_to_mark, current_roadmap_data)
+                            if is_week_resolved:
+                                logger.info(f"🚨 [WEEK STATUS] Tuần {week_number} ĐÃ HOÀN TẤT (DONE - All tasks resolved).")
+                                summary_record = await assessment_service.create_weekly_summary_record(
+                                    user_id=user_id,
+                                    completed_week_data=completed_week_data, # 🚨 DỮ LIỆU TUẦN CHÍNH XÁC (W1, không phải W12)
+                                    current_progress=current_progress,       # Tiến độ mới nhất
+                                    admin_supabase=admin_supabase
+                                )
+                                
+                                if summary_record:
+                                    logger.info(f"✅ Weekly Summary record P{summary_record.get('phase')}_W{summary_record.get('week_number')} successfully created.")
+                                    logger.debug(f"DEBUG: Summary object before passing to AI: {summary_record}")
+                                # 🚨 GỌI HÀM ĐIỀU PHỐI VÀ ĐIỀU CHỈNH BẰNG AI
+                                    success = await assessment_service.generate_and_apply_adaptive_roadmap(
+                                        user_id,
+                                        summary_record,        # Kết quả đánh giá tuần N
+                                        current_roadmap_data,  # Roadmap gốc
+                                        admin_supabase
+                                    )
+
+                                    if success:
+                                        logger.info("✅ SUCCESS: Đánh giá hoàn tất, AI đã điều chỉnh và cập nhật Roadmap tuần sau.")
+                                    else:
+                                        logger.error("❌ FAILED: Lỗi trong quá trình điều chỉnh Roadmap AI.")
+                                else:
+                                    logger.error("❌ Lỗi: Không thể chèn bản ghi tóm tắt tuần.")
+                                
+                            else:
+                                logger.info(f"☑️ [WEEK STATUS] Tuần {week_number} CHƯA HOÀN TẤT (NOT DONE - PENDING tasks remain).")                                
+                            if is_week_resolved:
+                                logger.info(f"🚨 DEBUG WEEK CHECK: WEEK {week_number} COMPLETED/RESOLVED. KÍCH HOẠT weekly_assessment.")
+                                user_level = current_roadmap_data.get('current_level', 'A2')
+                            else:
+                                logger.info(f"☑️ DEBUG WEEK CHECK: WEEK {week_number} NOT fully resolved yet. Status check passed.")
+                        else:
+                            logger.warning(f"DEBUG WEEK CHECK: Lesson ID {lesson_id_to_mark} not found in Roadmap structure.")
+
+                    except Exception as e:
+                        logger.warning(f"Lỗi khi kiểm tra hoàn thành tuần: {e}")
+                        pass # Cho phép tiếp tục thực thi
 
                 else:
                     logger.warning(f"Roadmap ID not found for user {user_id}. Skipping roadmap update.")
@@ -387,3 +434,4 @@ async def process_quiz_completion(user_id: str, result_data: QuizResultCreate):
         logger.error(f"Lỗi trong quá trình hoàn tất Quiz Vocabulary (Gộp Logic): {e}")
         # Ghi log chi tiết lỗi, nhưng trả về HTTPException thân thiện
         raise HTTPException(status_code=500, detail=f"Lỗi khi hoàn tất bài Quiz: {str(e)}")
+    

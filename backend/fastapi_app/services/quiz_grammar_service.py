@@ -7,9 +7,11 @@ from fastapi_app.services.user import get_user_level
 from fastapi_app.services.assessment_service import get_user_roadmap
 from fastapi_app.prompts import grammar as prompts
 import google.generativeai as genai
+from fastapi_app.services import assessment_service
 import traceback
 import os
 import logging
+import anyio
 # from google import genai
 # from google.genai import types as g_types
 
@@ -202,22 +204,7 @@ async def grade_and_track_quiz(session_id: int, user_id: str, answers: Dict[int,
     # ================================================================
     if lesson_id_to_mark:
         try:
-            
-            session_info = admin_supabase.table("QuizSessions") \
-                .select("topic").eq("id", session_id).single().execute()
-
-            # admin_supabase.table("CompletedTopics").upsert({
-            #     "user_id": user_id,
-            #     "lesson_id": session_info.data["topic"], 
-            #     "topic_type": "grammar",
-            # }).select('id').execute({'on_conflict': 'user_id,lesson_id'})
-            
-            roadmap_record = get_user_roadmap(user_id)
-            logger.debug(f"DEBUG: Loaded Roadmap ID: {roadmap_record.get('id')}")
-            logger.debug(f"DEBUG: Data keys: {roadmap_record.get('data', {}).keys()}")
-            logger.debug(f"DEBUG: Progress keys: {roadmap_record.get('data', {}).get('user_progress', {}).keys()}") 
-# Nếu userProgress nằm trong roadmap:
-            logger.debug(f"DEBUG: Progress keys: {roadmap_record.get('data', {}).get('roadmap', {}).get('user_progress', {}).keys()}")
+            roadmap_record = assessment_service.get_user_roadmap(user_id) # Giả định đây là hàm sync
             
             if roadmap_record and roadmap_record.get('data'):
                 current_roadmap_data = roadmap_record['data']
@@ -228,10 +215,8 @@ async def grade_and_track_quiz(session_id: int, user_id: str, answers: Dict[int,
                 if lesson_id_to_mark in current_progress:
                     task_progress = current_progress.get(lesson_id_to_mark, {})
                     
-                    # 1. Tính lượt thử mới
                     current_attempt = task_progress.get("attempt_count", 0) + 1
                     
-                    # 2. Xác định trạng thái mới
                     new_status = "PENDING" 
                     new_completed = False 
                     
@@ -239,46 +224,82 @@ async def grade_and_track_quiz(session_id: int, user_id: str, answers: Dict[int,
                         new_completed = True
                         new_status = "SUCCESS"
                     elif current_attempt >= MAX_ATTEMPTS:
-                        # Đã hết lượt thử và không đạt Mastery
                         new_completed = False
                         new_status = "END_OF_ATTEMPTS"
                     else:
-                        # Thất bại, nhưng vẫn còn lượt thử
                         new_completed = False
                         new_status = "PENDING"
                         
-                    # 3. Gán lại vào current_progress
+                    # Gán lại vào current_progress
                     current_progress[lesson_id_to_mark] = {
-                        **task_progress,  # Giữ lại các trường như 'type' đã khởi tạo
+                        **task_progress, 
                         "completed": new_completed,
-                        "score": round(score * 100),
+                        "score": score,
                         "attempt_count": current_attempt, 
                         "status": new_status              
                     }
-                    # current_roadmap_data['user_progress'] = current_progress 
-
-                    # # 4. KIỂM TRA HOÀN THÀNH TUẦN VÀ KÍCH HOẠT TÁI ĐÁNH GIÁ
-                    # week_id = get_week_id_from_lesson_id(lesson_id_to_mark) 
                     
-                    # if week_id and check_week_completion(current_progress, week_id):
-                    #     logger.info(f"🚨 WEEK {week_id} COMPLETED/RESOLVED. KÍCH HOẠT weekly_assessment.")
-                    #     # GỌI HÀM CẬP NHẬT ROADMAP:
-                    #     await weekly_assessment(user_id, current_roadmap_data) 
-                        
-                else:
-                    logger.warning(f"Lesson ID {lesson_id_to_mark} not found in userProgress map.")
-
-                # 4b. Lưu lại toàn bộ bản ghi roadmaps
-                if roadmap_id:
-                    admin_supabase.table("roadmaps") \
-                        .update({"data": current_roadmap_data}) \
-                        .eq("id", roadmap_id) \
-                        .execute()
+                    # 4b. Lưu lại toàn bộ bản ghi roadmaps (Sử dụng run_sync vì hàm là async)
+                    def db_update_sync():
+                         return admin_supabase.table("roadmaps") \
+                            .update({"data": current_roadmap_data}) \
+                            .eq("id", roadmap_id) \
+                            .execute()
+                            
+                    await anyio.to_thread.run_sync(db_update_sync)
                     
                     logger.info(f"✅ [PROGRESS TRACKED] Grammar {lesson_id_to_mark} updated (Status: {new_status}).")
 
+                    # ========================================================
+                    # 🚨 4c. KIỂM TRA HOÀN THÀNH TUẦN VÀ KÍCH HOẠT TÁI ĐÁNH GIÁ (LOGIC BỎ COMMENT & HOÀN THIỆN)
+                    # ========================================================
+                    try:
+                        completed_week_data = assessment_service.get_week_data_by_lesson_id(
+                            lesson_id_to_mark, 
+                            current_roadmap_data
+                        )
+                        
+                        if completed_week_data:
+                            week_number = completed_week_data.get('week_number', 'UNKNOWN')
+                            
+                            is_week_resolved = assessment_service.check_week_completion(
+                                current_progress, 
+                                completed_week_data
+                            ) 
+                            
+                            if is_week_resolved:
+                                logger.info(f"🚨 [WEEK STATUS] Tuần {week_number} ĐÃ HOÀN TẤT. KÍCH HOẠT ĐIỀU CHỈNH AI.")
+                                summary_record = await assessment_service.create_weekly_summary_record(
+                                    user_id=user_id,
+                                    completed_week_data=completed_week_data,
+                                    current_progress=current_progress, 
+                                    admin_supabase=admin_supabase
+                                )
+                                
+                                if summary_record:
+                                    # GỌI HÀM ĐIỀU CHỈNH BẰNG AI
+                                    await assessment_service.generate_and_apply_adaptive_roadmap(
+                                        user_id,
+                                        summary_record,
+                                        current_roadmap_data,
+                                        admin_supabase
+                                    )
+                                else:
+                                    logger.error("❌ Lỗi: Không thể tạo bản ghi tóm tắt tuần.")
+                            else:
+                                logger.info(f"☑️ [WEEK STATUS] Tuần {week_number} CHƯA HOÀN TẤT. (Pending tasks remain).")
+                        else:
+                            logger.warning(f"Lesson ID {lesson_id_to_mark} not found in Roadmap structure.")
+
+                    except Exception as e:
+                        logger.warning(f"Lỗi khi kiểm tra hoàn thành tuần/điều chỉnh AI: {e}")
+                        pass
+
                 else:
-                    logger.warning(f"Roadmap not found for user {user_id} to update progress.")
+                    logger.warning(f"Lesson ID {lesson_id_to_mark} not found in userProgress map.")
+
+            else:
+                logger.warning(f"Roadmap not found for user {user_id} to update progress.")
 
         except Exception as e:
             logger.error(f"❌ Lỗi khi cập nhật progress cho Grammar: {e}")
