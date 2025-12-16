@@ -12,7 +12,7 @@ from dotenv import load_dotenv
 load_dotenv()
 
 GEMINI_API_KEY = os.environ.get("GOOGLE_API_KEY")
-GEMINI_MODEL = os.environ.get("GEMINI_CHAT_MODEL", "gemini-2.5-flash")
+GEMINI_MODEL = os.environ.get("GEMINI_CHAT_MODEL", "gemini-2.5-flash-preview-09-2025")
 
 try:
     client = genai.Client(api_key=GEMINI_API_KEY)

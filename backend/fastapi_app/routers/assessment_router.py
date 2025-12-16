@@ -77,6 +77,7 @@ async def submit_assessment(request: Request):
         raise e
     except Exception as e:
         logger.exception("Lỗi server khi phân tích")
+        logger.exception(f"❌ [CRASH] Lỗi tại analyze_and_generate_roadmap: {str(e)}")
         raise HTTPException(status_code=500, detail=f"Lỗi server khi phân tích: {str(e)}")
 
 @router.get("/{user_id}")
