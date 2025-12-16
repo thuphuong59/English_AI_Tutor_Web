@@ -47,12 +47,20 @@ export default function AuthPage() {
       if (!res.ok) throw new Error(data.detail || "Something went wrong");
 
       if (isLogin) {
-        localStorage.setItem("access_token", data.access_token);
-        localStorage.setItem("token_type", data.token_type);
-        toast.success(" Login successful! Redirecting...");
-        setTimeout(() => (window.location.href = "/"), 1200);
+        const { access_token, token_type, user_role } = data;
+
+        localStorage.setItem("access_token", access_token);
+        localStorage.setItem("token_type", token_type);
+        localStorage.setItem("adminToken", access_token);
+
+        toast.success("Login successful! Redirecting...");
+
+        let redirectPath = "/";
+        if (user_role === "admin") redirectPath = "/admin/users";
+
+        setTimeout(() => (window.location.href = redirectPath), 1200);
       } else {
-        toast.success(" Signup successful! Please login now.");
+        toast.success("Signup successful! Please login now.");
         setIsLogin(true);
       }
     } catch (err: any) {
@@ -65,20 +73,20 @@ export default function AuthPage() {
   return (
     <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-[#e6f0fa] to-[#f8fcff]">
       <div className="bg-white shadow-xl rounded-2xl p-8 w-full max-w-md">
-        <div className="mb-4">
-          <Link
-            href="/"
-            className={`text-sm text-gray-500 hover:text-[${primaryColor}] transition`}
-          >
+        <div className="mb-6">
+          <Link href="/" className="text-sm text-gray-500 hover:underline">
             ← Back to Home
           </Link>
         </div>
 
-        <h2
-          className={`text-3xl font-extrabold text-center text-[${primaryColor}] mb-6 drop-shadow-md`}
-        >
-          {isLogin ? "Login to English AI Tutor" : "Create Your Account"}
+        <h2 className="text-3xl font-extrabold text-center mb-2" style={{ color: primaryColor }}>
+          {isLogin ? "Welcome Back" : "Create Account"}
         </h2>
+        <p className="text-center text-gray-500 mb-6">
+          {isLogin
+            ? "Login to continue learning with English AI Tutor"
+            : "Sign up to start your English journey"}
+        </p>
 
         <form onSubmit={handleSubmit} className="flex flex-col gap-4">
           {!isLogin && (
@@ -86,25 +94,30 @@ export default function AuthPage() {
               type="text"
               value={username}
               onChange={(e) => setUsername(e.target.value)}
-              placeholder="Your name"
-              className={`px-4 py-3 border rounded-lg focus:outline-none focus:ring-2 focus:ring-[${primaryColor}]`}
+              placeholder="Full name"
+              className="px-4 py-3 border rounded-lg focus:outline-none focus:ring-2"
+              style={{ outlineColor: primaryColor }}
               required
             />
           )}
+
           <input
             type="email"
             value={email}
             onChange={(e) => setEmail(e.target.value)}
-            placeholder="Email"
-            className={`px-4 py-3 border rounded-lg focus:outline-none focus:ring-2 focus:ring-[${primaryColor}]`}
+            placeholder="Email address"
+            className="px-4 py-3 border rounded-lg focus:outline-none focus:ring-2"
+            style={{ outlineColor: primaryColor }}
             required
           />
+
           <input
             type="password"
             value={password}
             onChange={(e) => setPassword(e.target.value)}
             placeholder="Password"
-            className={`px-4 py-3 border rounded-lg focus:outline-none focus:ring-2 focus:ring-[${primaryColor}]`}
+            className="px-4 py-3 border rounded-lg focus:outline-none focus:ring-2"
+            style={{ outlineColor: primaryColor }}
             required
           />
 
@@ -113,8 +126,9 @@ export default function AuthPage() {
               type="password"
               value={confirmPassword}
               onChange={(e) => setConfirmPassword(e.target.value)}
-              placeholder="Confirm Password"
-              className={`px-4 py-3 border rounded-lg focus:outline-none focus:ring-2 focus:ring-[${primaryColor}]`}
+              placeholder="Confirm password"
+              className="px-4 py-3 border rounded-lg focus:outline-none focus:ring-2"
+              style={{ outlineColor: primaryColor }}
               required
             />
           )}
@@ -123,10 +137,9 @@ export default function AuthPage() {
             type="submit"
             disabled={loading}
             className={`w-full py-3 font-semibold rounded-lg text-white transition ${
-              loading
-                ? "bg-gray-400 cursor-not-allowed"
-                : `bg-[${primaryColor}] hover:bg-[${primaryHover}]`
+              loading ? "bg-gray-400" : ""
             }`}
+            style={{ backgroundColor: loading ? undefined : primaryColor }}
           >
             {loading ? "Processing..." : isLogin ? "Login" : "Sign Up"}
           </button>
@@ -136,7 +149,8 @@ export default function AuthPage() {
           {isLogin ? "Don't have an account?" : "Already have an account?"}{" "}
           <button
             type="button"
-            className={`text-[${primaryColor}] font-semibold hover:underline`}
+            className="font-semibold hover:underline"
+            style={{ color: primaryColor }}
             onClick={() => setIsLogin(!isLogin)}
           >
             {isLogin ? "Sign Up" : "Login"}
