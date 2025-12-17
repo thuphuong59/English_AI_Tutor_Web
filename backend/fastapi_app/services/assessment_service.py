@@ -28,55 +28,7 @@ except ImportError:
 
 
 # --- HÀM 1: STT VÀ PHÂN TÍCH TRANSCRIPT ---
-
-async def run_stt_and_analysis_sync(audio_path: str, client):
-    """Thực hiện Speech-to-Text (STT) và tính số từ."""
-    def _sync_call():
-        with open(audio_path, "rb") as f:
-            audio_data = f.read()
-
-        return client.models.generate_content(
-            model="models/gemini-2.0-flash",
-            contents=[
-                {
-                    "role": "user",
-                    "parts": [
-                        {"text": "Please transcribe this audio."},
-                        {
-                            "inline_data": {
-                                "mime_type": "audio/mpeg", # Giả định mime_type phổ biến
-                                "data": audio_data,
-                            }
-                        }
-                    ]
-                }
-            ]
-        )
-
-    response = await run_in_threadpool(_sync_call)
-    transcript = response.text
-    word_count = len(transcript.split())  # tính số từ trong transcript
-
-    return {
-        "transcript": transcript,
-        "word_count": word_count
-    }
     
-async def analyze_transcript_with_gemini(transcript: str, client: genai.Client) -> str:
-    """Gọi Gemini để đánh giá ngữ pháp/từ vựng trong transcript của người dùng."""
-    analysis_prompt = f"Phân tích văn bản: '{transcript}' về lỗi ngữ pháp, chất lượng từ vựng, và đưa ra 2 gợi ý cải thiện."
-    try:
-        analysis_response = await run_in_threadpool(
-            client.models.generate_content,
-            model=GEMINI_MODEL,
-            contents=[analysis_prompt]
-        )
-        return analysis_response.text.strip()
-    except Exception as e:
-        logger.error(f"Lỗi phân tích Transcript LLM: {e}")
-        return "Lỗi phân tích. Vui lòng thử lại bài nói."
-
-
 # --- HÀM 2: CHẤM ĐIỂM TRẮC NGHIỆM THỰC TẾ ---
 
 def calculate_mcq_score(
@@ -168,6 +120,77 @@ def initialize_user_progress(learning_phases: List[Dict[str, Any]]) -> Dict[str,
                             }
                             
     return user_progress
+async def analyze_speaking_audio(audio_path: str, client):
+    def _sync_call():
+        with open(audio_path, "rb") as f:
+            audio_bytes = f.read()
+
+        return client.models.generate_content(
+            model="gemini-2.5-flash-preview-09-2025",
+            contents=[
+                {
+                    "role": "user",
+                    "parts": [
+                        {
+                            "text": """
+                            You are an English speaking assessment engine.
+
+                            Tasks:
+                            1. Transcribe the audio.
+                            2. Give a SHORT overall evaluation of speaking ability.
+                            3. Identify MAIN speaking weaknesses based on grammar, vocabulary, pronunciation, or fluency.
+
+                            Return ONLY valid JSON:
+                            {
+                            "transcript": "",
+                            "speaking_overall": "",
+                            "speaking_weakness": []
+                            }
+
+                            Rules:
+                            - speaking_overall: 1–2 sentences
+                            - speaking_weakness: list of short phrases (can be empty)
+                            - No scores
+                            - No word count
+                            """
+                        },
+                        {
+                            "inline_data": {
+                                "mime_type": "audio/mpeg",
+                                "data": audio_bytes
+                            }
+                        }
+                    ]
+                }
+            ],
+        )
+
+    try:
+        response = await run_in_threadpool(_sync_call)
+        raw_text = response.text.strip()
+
+        if raw_text.startswith("```"):
+            raw_text = raw_text.replace("```json", "").replace("```", "").strip()
+
+        data = json.loads(raw_text)
+
+        return {
+            "transcript": data.get("transcript", ""),
+            "speaking_overall": data.get(
+                "speaking_overall",
+                "Speaking ability could not be fully assessed."
+            ),
+            "speaking_weakness": data.get("speaking_weakness", []),
+        }
+
+    except Exception as e:
+        logger.error(f"[Speaking Gemini Error] {e}")
+
+        # 🔥 FALLBACK QUAN TRỌNG
+        return {
+            "transcript": "",
+            "speaking_overall": "Speaking assessment is temporarily unavailable due to system limits."
+        }
 async def analyze_and_generate_roadmap(
     payload_data: FinalAssessmentSubmission,
     audio_files: Dict[str, UploadFile]
@@ -185,150 +208,50 @@ async def analyze_and_generate_roadmap(
     # --- 2. XỬ LÝ SPEAKING ---
     full_speaking_analysis = []
 
-    # Tạo map từ file_key (dù frontend gửi gì) về tên file thực tế trong form
-    file_key_to_form_key = {}
-    for form_key in audio_files.keys():
-        # form_key có thể là 'audio_file_21' hoặc 'audio_file_21[]' hoặc 'audio_21' tùy frontend
-        logger.debug(f"Processing form_key for mapping: {form_key}")
-        if isinstance(form_key, str):
-            key = form_key
-            # direct numeric extraction
-            if key.startswith("audio_file_"):
-                num = key.replace("audio_file_", "")
-                file_key_to_form_key[num] = form_key
-                try:
-                    file_key_to_form_key[int(num)] = form_key
-                except ValueError:
-                    pass
-            else:
-                # try extract last numeric part
-                m = re.search(r"(\d+)", key)
-                if m:
-                    num = m.group(1)
-                    file_key_to_form_key[num] = form_key
-                    try:
-                        file_key_to_form_key[int(num)] = form_key
-                    except ValueError:
-                        pass
-                # also map the raw key itself
-                file_key_to_form_key[key] = form_key
+    if audio_files and payload_data.speaking_data:
+        for speaking_data_item in payload_data.speaking_data:
+            raw_key = speaking_data_item.file_key
 
-    logger.info(f"[service] File key mapping (after scan): {file_key_to_form_key}")
+            # Fallback: chỉ lấy file đầu tiên nếu FE gửi 1 file
+            audio_file = next(iter(audio_files.values()), None)
 
-    # Log speaking_data coming in payload for debug
-    try:
-        logger.info(f"[service] speaking_data payload: {payload_data.speaking_data}")
-    except Exception:
-        logger.exception("Không thể log speaking_data")
-
-    for speaking_data_item in payload_data.speaking_data:
-        raw_key = speaking_data_item.file_key
-        logger.info(f"[service] Raw file_key từ frontend: {raw_key} (type: {type(raw_key)})")
-
-        # Chuẩn hóa key: thử tất cả các khả năng
-        possible_keys = []
-        try:
-            raw_key_str = str(raw_key).strip()
-            possible_keys = [
-                raw_key_str,
-                raw_key_str.lstrip("Qq"),
-                raw_key_str.replace("question_", ""),
-                f"audio_file_{raw_key_str}",
-                f"audio_{raw_key_str}",
-            ]
-        except Exception:
-            possible_keys = [str(raw_key)]
-
-        # Nếu raw_key là số dạng int/float
-        if isinstance(raw_key, (int, float)):
-            possible_keys.append(str(int(raw_key)))
-
-        # Deduplicate
-        seen = set()
-        possible_keys = [k for k in possible_keys if not (k in seen or seen.add(k))]
-
-        logger.debug(f"[service] possible_keys to try for raw_key {raw_key}: {possible_keys}")
-
-        matched_form_key = None
-        for k in possible_keys:
-            # 1) direct in mapping dict
-            if k in file_key_to_form_key:
-                matched_form_key = file_key_to_form_key[k]
-                logger.info(f"[service] matched via file_key_to_form_key: {k} -> {matched_form_key}")
-                break
-            # 2) direct form key present
-            if k in audio_files:
-                matched_form_key = k
-                logger.info(f"[service] matched direct form key: {k}")
-                break
-            # 3) try with audio_file_ prefix
-            prefix = f"audio_file_{k}"
-            if prefix in audio_files:
-                matched_form_key = prefix
-                logger.info(f"[service] matched with prefix: {prefix}")
-                break
-
-        audio_file = audio_files.get(matched_form_key) if matched_form_key else None
-
-        if not audio_file:
-            logger.warning(f"Không tìm thấy audio cho file_key={raw_key} (đã thử: {possible_keys})")
-            logger.warning(f"Các key có sẵn: {list(audio_files.keys())}")
-            # fallback: nếu chỉ có 1 file, giả sử map vào đó (chỉ để debug, có thể loại bỏ sản xuất)
-            if len(audio_files) == 1 and not full_speaking_analysis: # Chỉ dùng fallback nếu đây là file đầu tiên
-                only_key = list(audio_files.keys())[0]
-                logger.warning(f"[service] Fallback: chỉ có 1 file upload, dùng {only_key}")
-                audio_file = audio_files.get(only_key)
-            else:
+            if not audio_file:
+                logger.warning(f"[Speaking] No audio found for Q{raw_key}")
                 continue
-        else:
-            logger.info(f"ĐÃ TÌM THẤY audio cho Q{raw_key}: {matched_form_key} -> filename: {getattr(audio_file,'filename',None)}")
 
-        # --- Kiểm tra nhanh nội dung file (size) trước khi ghi temp ---
-        try:
-            # Ở đây chỉ để log size approximate nếu có attribute .file
-            file_obj = audio_file.file
-            file_obj.seek(0, 2)
-            size = file_obj.tell()
-            file_obj.seek(0)
-            logger.info(f"[service] File info - key: {matched_form_key}, filename: {getattr(audio_file,'filename',None)}, size_bytes: {size}")
-        except Exception:
-            logger.exception("Không thể lấy file size")
+            tmp_path = None
+            try:
+                file_bytes = await audio_file.read()
+                suffix = os.path.splitext(audio_file.filename)[1] or ".mp3"
 
-        # --- Từ đây giữ nguyên xử lý file ---
-        tmp_path = None
-        try:
-            file_content = await audio_file.read()
-            suffix = os.path.splitext(audio_file.filename)[1] or ".mp3"
+                with NamedTemporaryFile(delete=False, suffix=suffix) as tmp:
+                    tmp_path = tmp.name
+                    await run_in_threadpool(tmp.write, file_bytes)
 
-            with NamedTemporaryFile(delete=False, suffix=suffix) as tmp:
-                tmp_path = tmp.name
-                await run_in_threadpool(tmp.write, file_content)
+                speaking_result = await analyze_speaking_audio(tmp_path, client)
 
-            logger.info(f"[service] Viết tạm file: {tmp_path}")
+                # Nếu không có lời nói → bỏ qua
+                if not speaking_result.get("transcript") and speaking_result.get("status") == "FALLBACK":
+                    logger.warning(f"[Speaking] Gemini unavailable for Q{raw_key} (quota or overload)")
 
-            # STT
-            stt_result = await run_stt_and_analysis_sync(tmp_path, client)
+                full_speaking_analysis.append({
+                    "question_id": raw_key,
+                    "transcript": speaking_result["transcript"],
+                    "speaking_overall": speaking_result["speaking_overall"],
+                    "latency_s": speaking_data_item.latency_ms / 1000,
+                    "status": "OK",
+                })
 
-            # Gemini Grammar
-            llm_comment = await analyze_transcript_with_gemini(stt_result['transcript'], client)
+            except Exception as e:
+                logger.warning(f"[Speaking] Failed Q{raw_key}: {e}")
 
-            full_speaking_analysis.append({
-                "question_id": raw_key,
-                "transcript": stt_result['transcript'],
-                "word_count": stt_result['word_count'],
-                "latency_s": speaking_data_item.latency_ms / 1000,
-                "llm_grammar_comment": llm_comment,
-            })
+            finally:
+                if tmp_path and os.path.exists(tmp_path):
+                    try:
+                        os.unlink(tmp_path)
+                    except:
+                        pass
 
-        except Exception as e:
-            logger.exception(f"Lỗi xử lý audio cho Q{raw_key}: {e}")
-
-        finally:
-            if tmp_path and os.path.exists(tmp_path):
-                try:
-                    os.unlink(tmp_path)
-                except:
-                    pass
     
     # --- 3. XÂY DỰNG PROMPT CHO GEMINI và tạo roadmap ---
     prefs = payload_data.preferences
@@ -336,23 +259,27 @@ async def analyze_and_generate_roadmap(
 
     weak_points_list = list(mcq_analysis.get('weak_topics', []))
     has_speaking = len(full_speaking_analysis) > 0
-    if has_speaking and full_speaking_analysis[0]['latency_s'] > 1.5:
-        weak_points_list.append("Phản xạ chậm (Latency > 1.5s)")
 
-    speaking_transcript = full_speaking_analysis[0]['transcript'] if has_speaking else "Không có dữ liệu nói."
+    speaking_overall = (
+        full_speaking_analysis[0]["speaking_overall"]
+        if has_speaking
+        else "Không có đánh giá speaking."
+    )
 
+    for weakness in speaking_result.get("speaking_weakness", []):
+        weak_points_list.append(f"Speaking: {weakness}")
     # CẬP NHẬT PROMPT ĐỂ TẠO CẤU TRÚC JSON CHI TIẾT THEO YÊU CẦU
     roadmap_prompt = build_roadmap_prompt(
         mcq_analysis=mcq_analysis,
         weak_points_list=weak_points_list,
-        speaking_transcript=speaking_transcript,
+        speaking_overall=speaking_overall,
         prefs_dict=prefs_dict,
     )
 
     try:
         roadmap_response = await run_in_threadpool(
             client.models.generate_content,
-            model=GEMINI_MODEL,
+            model="gemini-2.5-flash",
             contents=[roadmap_prompt],
             config=g_types.GenerateContentConfig(response_mime_type="application/json")
         )

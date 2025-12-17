@@ -1,7 +1,7 @@
 def build_roadmap_prompt(
     mcq_analysis,
     weak_points_list,
-    speaking_transcript,
+    speaking_overall,
     prefs_dict,
 ):
     return f"""
@@ -13,7 +13,7 @@ Learner information:
 
     Key weaknesses: {", ".join(weak_points_list) if weak_points_list else "Not clearly identified"}
 
-    Sample speaking transcript: "{speaking_transcript}"
+    Speaking overall evaluation: "{speaking_overall}"
 
     Daily learning commitment: {prefs_dict['daily_commitment']}
 
@@ -23,7 +23,7 @@ Learner information:
 
     Strict requirements:
 
-    Analyze the MCQ result ({mcq_analysis}), speaking skills ({speaking_transcript}), and response latency to self-evaluate the learner’s current level (e.g., A1, A2, B1...).
+    Analyze the MCQ result ({mcq_analysis}), ({speaking_overall}) and response latency to self-evaluate the learner’s current level (e.g., A1, A2, B1...).
 
     Write an overall summary (150–250 words) in Vietnamese for the "user_summary" key.
 

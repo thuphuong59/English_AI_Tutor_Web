@@ -182,7 +182,7 @@ export default function QuizPage() {
             toast.success(`Nộp bài hoàn tất! Điểm của bạn: ${(results.score_percent * 100).toFixed(0)}%.`);
             
             setTimeout(() => {
-                router.push("/profile"); 
+               router.push(`/quiz_grammar/results?sessionId=${sessionId}`);
             }, 800);
 
         } catch (error) {

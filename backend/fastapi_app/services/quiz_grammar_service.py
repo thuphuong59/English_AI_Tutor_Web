@@ -136,7 +136,32 @@ async def generate_quiz_questions(session_id: int, topic_name: str, user_id: str
             "status": "ERROR"
         }).eq("id", session_id).execute()
 
+async def get_quiz_result_by_session(session_id: int):
+    """
+    Logic nghiệp vụ: Lấy dữ liệu thô từ DB và xử lý định dạng cho Frontend
+    """
+    if admin_supabase is None:
+        raise Exception("Supabase not initialized")
 
+    res = admin_supabase.table("QuizSessions") \
+        .select("score, total_questions, weak_areas") \
+        .eq("id", session_id) \
+        .maybe_single() \
+        .execute()
+
+    if not res.data:
+        return None
+
+    score_val = res.data.get("score", 0)
+    total_q = res.data.get("total_questions", 0)
+    
+    # Tính toán dữ liệu trả về
+    return {
+        "score": int(score_val * total_q),
+        "total": total_q,
+        "percentage": int(score_val * 100),
+        "missedWords": res.data.get("weak_areas", [])
+    }
 # ============================
 # GRADE & TRACK
 # ============================
@@ -179,7 +204,7 @@ async def grade_and_track_quiz(session_id: int, user_id: str, answers: Dict[int,
     
     weak_areas_report = []
     if not mastery_achieved:
-        weak_areas_report.append(f"Cần ôn tập: {topic_chinh} (Điểm: {score*100:.0f}%)")
+        weak_areas_report.append(f"{topic_chinh} (Điểm: {score*100:.0f}%)")
     else:
         weak_areas_report.append("Đã thành thạo chủ đề này.")
 
