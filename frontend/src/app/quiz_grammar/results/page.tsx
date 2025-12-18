@@ -46,10 +46,10 @@ function ResultsContent() {
         <div className="min-h-screen flex flex-col items-center justify-center gap-4">
             <p className="text-red-500 font-bold">Không tìm thấy dữ liệu kết quả cho phiên này.</p>
             <button 
-                onClick={() => router.push('/roadmap')}
+                onClick={() => router.push('/profile')}
                 className="px-4 py-2 bg-blue-500 text-white rounded-lg hover:bg-blue-600 transition"
             >
-                Quay lại Roadmap
+                Back to Roadmap
             </button>
         </div>
     );
