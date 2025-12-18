@@ -11,7 +11,8 @@ import {
     FiSettings, 
     FiLogOut, 
     FiGrid,
-    FiMessageSquare
+    FiMessageSquare,
+    FiLayers
 } from 'react-icons/fi';
 
 interface AdminLayoutProps {
@@ -28,7 +29,7 @@ const AdminLayout: React.FC<AdminLayoutProps> = ({ children }) => {
         }
     };
 
-    // Danh sách Menu đầy đủ cho hệ thống
+    // Danh sách Menu
     const menuItems = [
         { 
             category: "Main",
@@ -40,12 +41,13 @@ const AdminLayout: React.FC<AdminLayoutProps> = ({ children }) => {
                     active: pathname?.startsWith('/admin/users'),
                     disabled: false
                 },
+                // Nếu chưa có trang sessions riêng thì tạm thời để disable hoặc trỏ về users
                 { 
                     name: 'Session History', 
                     href: '/admin/sessions', 
                     icon: FiMessageSquare, 
                     active: pathname?.startsWith('/admin/sessions'),
-                    disabled: true // Tạm thời disable vì ta xem session qua User Detail
+                    disabled: true 
                 }
             ]
         },
@@ -53,11 +55,12 @@ const AdminLayout: React.FC<AdminLayoutProps> = ({ children }) => {
             category: "Content & AI",
             items: [
                 { 
-                    name: 'Vocabulary Bank', 
-                    href: '/admin/vocabulary', 
-                    icon: FiBookOpen, 
-                    active: false,
-                    disabled: true 
+                    // --- ĐÃ CẬP NHẬT & MỞ KHÓA MỤC NÀY ---
+                    name: 'Decks & Vocabulary', 
+                    href: '/admin/content/decks', // Trỏ đến trang DeckManagement
+                    icon: FiLayers, 
+                    active: pathname?.startsWith('/admin/content'),
+                    disabled: false // Cho phép click
                 },
                 { 
                     name: 'Prompt Engineering', 

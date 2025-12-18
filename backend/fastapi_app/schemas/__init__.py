@@ -68,5 +68,8 @@ from .admin import (
     SessionOverview,
     MessageDetail,
     SessionDetail,
-    AdminUserUpdate
+    AdminUserUpdate,
+    VocabBase,
+    VocabCreate,
+    VocabResponse,VocabUpdate
 )
