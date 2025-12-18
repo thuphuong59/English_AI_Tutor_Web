@@ -12,7 +12,8 @@ import {
     FiLogOut, 
     FiGrid,
     FiMessageSquare,
-    FiLayers
+    FiLayers,
+    FiMessageCircle // Icon cho Scenarios
 } from 'react-icons/fi';
 
 interface AdminLayoutProps {
@@ -41,13 +42,12 @@ const AdminLayout: React.FC<AdminLayoutProps> = ({ children }) => {
                     active: pathname?.startsWith('/admin/users'),
                     disabled: false
                 },
-                // Nếu chưa có trang sessions riêng thì tạm thời để disable hoặc trỏ về users
                 { 
                     name: 'Session History', 
                     href: '/admin/sessions', 
                     icon: FiMessageSquare, 
                     active: pathname?.startsWith('/admin/sessions'),
-                    disabled: true 
+                    disabled: false // Đã mở khóa để bạn truy cập
                 }
             ]
         },
@@ -55,12 +55,19 @@ const AdminLayout: React.FC<AdminLayoutProps> = ({ children }) => {
             category: "Content & AI",
             items: [
                 { 
-                    // --- ĐÃ CẬP NHẬT & MỞ KHÓA MỤC NÀY ---
                     name: 'Decks & Vocabulary', 
-                    href: '/admin/content/decks', // Trỏ đến trang DeckManagement
+                    href: '/admin/content/decks', 
                     icon: FiLayers, 
                     active: pathname?.startsWith('/admin/content'),
-                    disabled: false // Cho phép click
+                    disabled: false 
+                },
+                { 
+                    // --- MỤC MỚI: QUẢN LÝ KỊCH BẢN ---
+                    name: 'Roleplay Scenarios', 
+                    href: '/admin/scenarios', 
+                    icon: FiMessageCircle, 
+                    active: pathname?.startsWith('/admin/scenarios'),
+                    disabled: false 
                 },
                 { 
                     name: 'Prompt Engineering', 

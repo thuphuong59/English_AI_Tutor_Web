@@ -158,3 +158,60 @@ def update_user_in_db(db: Any, user_id: str, update_data: AdminUserUpdate) -> Di
     except Exception as e:
         print(f"DB Error (update_user_in_db): {e}")
         raise e
+    
+def get_all_sessions_global(db: Any, limit: int = 100, search_query: Optional[str] = None) -> List[Dict[str, Any]]:
+    """Lấy danh sách session, hỗ trợ tìm kiếm (xử lý logic ghép và lọc bằng Python an toàn)"""
+    try:
+        # 1. Lấy danh sách Sessions (Tăng limit lên để tìm kiếm rộng hơn)
+        # Nếu đang tìm kiếm, ta có thể muốn lấy nhiều hơn để filter
+        fetch_limit = 200 if search_query else limit
+        
+        response = db.from_('conversation_sessions')\
+            .select("*")\
+            .order("created_at", desc=True)\
+            .limit(fetch_limit)\
+            .execute()
+        
+        sessions = response.data
+        if not sessions:
+            return []
+
+        # 2. Lấy danh sách User ID cần tìm
+        user_ids = list(set([s['user_id'] for s in sessions if s.get('user_id')]))
+
+        # 3. Lấy thông tin User
+        if user_ids:
+            profiles_response = db.from_('profiles')\
+                .select("id, username")\
+                .in_("id", user_ids)\
+                .execute()
+            profiles_map = {p['id']: p for p in profiles_response.data}
+        else:
+            profiles_map = {}
+
+        # 4. Ghép thông tin & Lọc kết quả (Search Logic)
+        final_results = []
+        search_lower = search_query.lower() if search_query else None
+
+        for session in sessions:
+            uid = session.get('user_id')
+            user_info = profiles_map.get(uid, {'username': 'Unknown'})
+            session['profiles'] = user_info # Gán vào để frontend dùng
+
+            # LOGIC LỌC: Nếu có từ khóa, kiểm tra xem nó có nằm trong Topic hoặc Username không
+            if search_lower:
+                topic_match = search_lower in (session.get('topic') or "").lower()
+                user_match = search_lower in (user_info.get('username') or "").lower()
+                
+                if topic_match or user_match:
+                    final_results.append(session)
+            else:
+                # Nếu không tìm kiếm, cứ thêm vào
+                final_results.append(session)
+
+        # Trả về số lượng theo limit yêu cầu ban đầu (sau khi đã lọc)
+        return final_results[:limit]
+
+    except Exception as e:
+        print(f"DB Error (get_all_sessions_global): {e}")
+        return []

@@ -5,7 +5,7 @@ import os
 from fastapi_app.routers import analysis
 from fastapi_app.routers import (
     auth, conversation, user, vocabulary, 
-    decks, public_decks, grammar_check, quizgame,admin, admin_content
+    decks, public_decks, grammar_check, quizgame,admin, admin_content,admin_scenarios
 )
 from fastapi_app.routers import audio
 from fastapi_app.routers import test_router, check_grammar_router, speech_router, assessment_router, quiz_grammar_router
@@ -44,6 +44,7 @@ app.include_router(quizgame.router, prefix="/api")
 app.include_router(audio.router, prefix="/audio", tags=["audio"])
 app.include_router(admin.router)
 app.include_router(admin_content.router)
+app.include_router(admin_scenarios.router)
 
 # Routers từ phiên bản đến:
 app.include_router(test_router.router)

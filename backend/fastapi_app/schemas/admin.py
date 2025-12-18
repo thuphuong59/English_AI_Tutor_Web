@@ -111,3 +111,33 @@ class VocabResponse(VocabBase):
 
     class Config:
         from_attributes = True
+
+# Schema cho 1 câu thoại
+class DialogueLine(BaseModel):
+    turn: int
+    speaker: str # 'ai' hoặc 'user'
+    line: str
+
+# Schema cho Kịch bản (Scenario)
+class ScenarioBase(BaseModel):
+    title: str
+    topic: str
+    level: str # Beginner, Intermediate, Advanced
+
+class ScenarioCreate(ScenarioBase):
+    dialogues: List[DialogueLine] # Khi tạo, gửi kèm luôn nội dung hội thoại
+
+class ScenarioUpdate(BaseModel):
+    title: Optional[str] = None
+    topic: Optional[str] = None
+    level: Optional[str] = None
+    # Để đơn giản, update dialogues ta sẽ làm logic riêng hoặc ghi đè toàn bộ
+
+class ScenarioResponse(ScenarioBase):
+    id: str
+    created_at: Optional[str] = None
+    # Trả về kèm dialogues để hiển thị chi tiết
+    dialogues: Optional[List[DialogueLine]] = None
+
+    class Config:
+        from_attributes = True

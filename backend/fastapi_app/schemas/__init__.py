@@ -71,5 +71,10 @@ from .admin import (
     AdminUserUpdate,
     VocabBase,
     VocabCreate,
-    VocabResponse,VocabUpdate
+    VocabResponse,
+    VocabUpdate,
+    ScenarioBase,
+    ScenarioCreate,
+    ScenarioUpdate,
+    ScenarioResponse
 )

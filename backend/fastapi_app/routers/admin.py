@@ -99,3 +99,8 @@ async def update_user(user_id: str, user_data: AdminUserUpdate):
     except Exception as e:
         print(f"API Error: {e}")
         raise HTTPException(status_code=500, detail="Internal Server Error")
+    
+@router.get("/sessions")
+async def list_global_sessions(search: Optional[str] = Query(None)): # <--- Thêm tham số search
+    """Lấy danh sách hội thoại, hỗ trợ tìm kiếm theo Topic hoặc Username."""
+    return admin_crud.get_all_sessions_global(db=db_client, search_query=search)
