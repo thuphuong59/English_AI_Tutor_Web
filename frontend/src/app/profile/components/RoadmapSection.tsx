@@ -4,11 +4,20 @@
 import React, { useState, useEffect, useCallback } from "react";
 import toast from "react-hot-toast";
 import { useRouter } from "next/navigation";
-import { Loader2 } from "lucide-react";
+import { Loader2, Lock } from "lucide-react";
 
 // --- Khai báo Prop Interface ---
 interface RoadmapSectionProps {
     userLevel: string; // Level thực tế của người dùng
+}
+interface TaskGroupProps {
+    title: string;
+    tasks: any[];
+    userProgress: any;
+    // Định nghĩa rõ onStart chấp nhận 4 đối số và trả về Promise<void>
+    onStart: (lessonId: string, topicTitle: string, taskType: string, isTitleClick: boolean) => Promise<void>; 
+    taskType: string;
+    isWeekDisabled: boolean; // <--- THÊM DÒNG NÀY
 }
 
 // Hàm tiện ích: Kiểm tra xem tất cả các items trong tuần đã hoàn thành chưa
@@ -23,9 +32,13 @@ const checkAllTasksCompleted = (week: any, userProgress: any) => {
 
     if (allTasks.length === 0) return false;
 
-    return allTasks.every((task: any) => 
-        userProgress[task.lesson_id]?.completed === true
-    );
+    return allTasks.every((task: any) => {
+        const progress = userProgress[task.lesson_id];
+        if (!progress) return false; // Nếu chưa có progress, coi là chưa giải quyết (PENDING)
+        
+        // Task đã giải quyết nếu: Đạt Mastery HOẶC Hết lượt thử
+        return progress.completed === true || progress.status === "END_OF_ATTEMPTS";
+    });
 };
 
 // 🚨 Interface cho TaskGroup (Đã sửa lỗi TypeScript)
@@ -39,7 +52,7 @@ interface TaskGroupProps {
 }
 
 // TaskGroup component (ĐÃ SỬA LỖI TYPESCRIPT)
-const TaskGroup = ({ title, tasks, userProgress, onStart, taskType }: TaskGroupProps) => {
+const TaskGroup = ({ title, tasks, userProgress, onStart, taskType, isWeekDisabled }: TaskGroupProps) => {
     if (!tasks || tasks.length === 0) return null;
     return (
         <div className="pt-2">
@@ -47,7 +60,10 @@ const TaskGroup = ({ title, tasks, userProgress, onStart, taskType }: TaskGroupP
             <div className="space-y-2">
                 {tasks.map((task: any) => {
                     const isCompleted = userProgress[task.lesson_id]?.completed || false;
-                    const isTitleClickable = (taskType === 'vocabulary' || taskType === 'grammar') && !isCompleted;
+                    const progress = userProgress[task.lesson_id] || {};
+                    const isEndOfAttempts = progress.status === 'END_OF_ATTEMPTS';                   
+                    const isTitleClickable = (taskType === 'vocabulary' || taskType === 'grammar') && !isCompleted && !isWeekDisabled && !isEndOfAttempts;
+                    const isClickable = !isWeekDisabled && !isCompleted && !isEndOfAttempts;
                     
                     return (
                         <div key={task.lesson_id} className="flex justify-between items-center p-3 bg-white rounded-2xl border border-slate-100 shadow-sm transition-all hover:border-blue-200 group">
@@ -68,11 +84,27 @@ const TaskGroup = ({ title, tasks, userProgress, onStart, taskType }: TaskGroupP
                             {isCompleted ? (
                                 // ✅ HIỂN THỊ FINISHED
                                 <span className="text-emerald-500 text-[9px] font-black bg-emerald-50 px-2 py-0.5 rounded-md">FINISHED</span>
+                            ) : isEndOfAttempts ? (
+                                < span className="flex items-center gap-1 text-red-500 text-[9px] font-black bg-red-50 px-2 py-0.5 rounded-md">
+                                <Lock size={10} /> Review later
+                                </span>
                             ) : (
                                 // 🚨 Nút START: TRUYỀN isTitleClick = false
                                 <button 
-                                    onClick={() => onStart(task.lesson_id, task.title, taskType, false)} 
-                                    className="px-3 py-1.5 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition text-[10px] font-black shadow-sm shadow-blue-200"
+                                    onClick={() => {
+                                        if (isClickable) {
+                                            onStart(task.lesson_id, task.title, taskType, false);
+                                        } else if (isWeekDisabled) {
+                                            // Thêm thông báo khi click vào nút bị khóa
+                                            toast.error("Vui lòng hoàn thành tuần trước để mở khóa bài học này.");
+                                        }
+                                    }} 
+                                    className={`px-3 py-1.5 rounded-lg transition text-[10px] font-black shadow-sm 
+                                        ${isClickable 
+                                            ? 'bg-blue-600 text-white hover:bg-blue-700 shadow-blue-200 cursor-pointer' 
+                                            : 'bg-slate-200 text-slate-500 cursor-not-allowed' // ÁP DỤNG STYLE KHÓA
+                                        }`}
+                                    disabled={isWeekDisabled} // <--- VÔ HIỆU HÓA NÚT THẬT SỰ
                                 >
                                     START
                                 </button>
@@ -265,8 +297,17 @@ export function RoadmapSection({ userLevel }: RoadmapSectionProps) {
 
         setIsGenerating(true);
         const loadingId = toast.loading(loadingMsg);
+        const payload = {
+            topic_name: topicTitle,
+            lesson_id: lessonId
+        };
+
+        // 🔥 LOG QUAN TRỌNG NHẤT
+        console.log("🚀 FE PAYLOAD SENT TO BACKEND:", payload);
+        console.log("🚀 FE PAYLOAD SENT TO BACKEND:", lessonId);
         
         try {
+            
             const response = await fetch(`http://localhost:8000${endpoint}`, {
                 method: "POST",
                 headers: headers,
@@ -309,6 +350,7 @@ export function RoadmapSection({ userLevel }: RoadmapSectionProps) {
 
     if (isLoading) return <div className="p-6">Đang tải lộ trình...</div>;
     if (!roadmap?.roadmap || roadmap.roadmap.length === 0) return null;
+    let hasFoundFirstIncompleteWeek = false; 
 
     return (
         <div className="relative w-full space-y-8">
@@ -324,7 +366,10 @@ export function RoadmapSection({ userLevel }: RoadmapSectionProps) {
 
             <div className="space-y-6">
                 {roadmap.roadmap.map((stage: any, sIdx: number) => (
+                    // Mở thẻ Stage Div
                     <div key={sIdx} className="bg-white rounded-3xl border border-slate-100 shadow-sm overflow-hidden">
+                        
+                        {/* Stage Header */}
                         <div className="bg-blue-600 p-5 flex justify-between items-center cursor-pointer" onClick={() => setOpenStageIndex(openStageIndex === sIdx ? null : sIdx)}>
                             <h3 className="text-white font-bold text-sm">{stage.phase_name}</h3>
                             <div className="flex items-center gap-3 text-white">
@@ -333,38 +378,72 @@ export function RoadmapSection({ userLevel }: RoadmapSectionProps) {
                             </div>
                         </div>
 
+                        {/* Weeks Loop */}
                         {openStageIndex === sIdx && (
                             <div className="p-4 space-y-4 bg-slate-50/50">
-                                {stage.weeks.map((week: any, wIdx: number) => (
-                                    <div key={wIdx} className="bg-white rounded-2xl border border-slate-50 shadow-sm">
-                                        <div className="p-4 flex justify-between items-center cursor-pointer" onClick={() => setOpenWeekIndex({...openWeekIndex, [sIdx]: openWeekIndex[sIdx] === wIdx ? null : wIdx})}>
-                                            <div className="flex items-center gap-4">
-                                                <div className={`w-9 h-9 rounded-xl flex items-center justify-center font-black text-xs ${openWeekIndex[sIdx] === wIdx ? 'bg-blue-600 text-white' : 'bg-slate-50 text-slate-400'}`}>
-                                                    {week.week_number}
-                                                </div>
-                                                <span className="font-bold text-slate-700 text-xs">Week {week.week_number}</span>
-                                            </div>
-                                            <span className="text-slate-300 text-[10px] uppercase font-bold">{openWeekIndex[sIdx] === wIdx ? "Đóng" : "Mở"}</span>
-                                        </div>
+                                {stage.weeks.map((week: any, wIdx: number) => {
+                                    
+                                    const isCompleted = checkAllTasksCompleted(week, roadmap.userProgress);
+                                    let isLocked = false;
+                                    
+                                    // 🚨 LOGIC KHÓA TUẦN
+                                    if (!isCompleted && !hasFoundFirstIncompleteWeek) {
+                                        // Đây là tuần đầu tiên chưa hoàn thành (Tuần đang học). Cho phép truy cập.
+                                        hasFoundFirstIncompleteWeek = true;
+                                    } else if (hasFoundFirstIncompleteWeek) {
+                                        // Đã tìm thấy tuần đang học, khóa tuần này và tất cả các tuần sau đó.
+                                        isLocked = true;
+                                    }
 
-                                        {openWeekIndex[sIdx] === wIdx && (
-                                            <div className="p-4 border-t space-y-6 animate-in duration-200">
-                                                <TaskGroup title="Grammar focus" tasks={week.grammar.items} userProgress={roadmap.userProgress} onStart={handleStartActivity} taskType='grammar' />
-                                                <TaskGroup title="Vocabulary" tasks={week.vocabulary.items} userProgress={roadmap.userProgress} onStart={handleStartActivity} taskType='vocabulary' />
-                                                <TaskGroup title="Speaking skills" tasks={week.speaking.items} userProgress={roadmap.userProgress} onStart={handleStartActivity} taskType='speaking' />
-                                                
-                                                <div className="p-3 bg-blue-50/50 border border-blue-100 rounded-xl text-blue-700 text-[10px] font-semibold">
-                                                    🎯 Mục tiêu: {week.expected_outcome}
+                                    return (
+                                        <div key={wIdx} className="bg-white rounded-2xl border border-slate-50 shadow-sm">
+                                            {/* Header Week */}
+                                            <div 
+                                                // 🚨 FIX: KHÔNG CẦN STYLE LÀM MỜ (opacity-70) VÀ LUÔN CHO PHÉP CLICK
+                                                className={`p-4 flex justify-between items-center cursor-pointer`} 
+                                                onClick={() => {
+                                                    // Luôn cho phép mở/đóng (Xem nội dung)
+                                                    setOpenWeekIndex({...openWeekIndex, [sIdx]: openWeekIndex[sIdx] === wIdx ? null : wIdx});
+                                                    
+                                                    // Thông báo cho người dùng biết nội dung bị khóa hành động
+                                                    if (isLocked) {
+                                                        toast.error("Vui lòng hoàn thành tuần trước để bắt đầu bài học này.");
+                                                    }
+                                                }}
+                                            >
+                                                <div className="flex items-center gap-4">
+                                                    <div className={`w-9 h-9 rounded-xl flex items-center justify-center font-black text-xs ${openWeekIndex[sIdx] === wIdx ? 'bg-blue-600 text-white' : 'bg-slate-50 text-slate-400'}`}>
+                                                        {week.week_number}
+                                                    </div>
+                                                    <span className={`font-bold text-xs text-slate-700`}>Week {week.week_number}</span> 
+                                                    {isLocked && <span className="text-red-500 text-[8px] font-black bg-red-50 px-2 py-0.5 rounded-md">LOCKED</span>}
                                                 </div>
+                                                <span className="text-slate-300 text-[10px] uppercase font-bold">{openWeekIndex[sIdx] === wIdx ? "Đóng" : "Mở"}</span>
                                             </div>
-                                        )}
-                                    </div>
-                                ))}
+
+                                            {/* Body Week: Task Groups */}
+                                            {openWeekIndex[sIdx] === wIdx && (
+                                                <div className="p-4 border-t space-y-6 animate-in duration-200">
+                                                    {/* 🚨 TRUYỀN PROP KHÓA isWeekDisabled */}
+                                                    <TaskGroup title="Grammar focus" tasks={week.grammar.items} userProgress={roadmap.userProgress} onStart={handleStartActivity} taskType='grammar' isWeekDisabled={isLocked} />
+                                                    <TaskGroup title="Vocabulary" tasks={week.vocabulary.items} userProgress={roadmap.userProgress} onStart={handleStartActivity} taskType='vocabulary' isWeekDisabled={isLocked} />
+                                                    <TaskGroup title="Speaking skills" tasks={week.speaking.items} userProgress={roadmap.userProgress} onStart={handleStartActivity} taskType='speaking' isWeekDisabled={isLocked} />
+                                                    
+                                                    <div className="p-3 bg-blue-50/50 border border-blue-100 rounded-xl text-blue-700 text-[10px] font-semibold">
+                                                        🎯 Mục tiêu: {week.expected_outcome}
+                                                    </div>
+                                                </div>
+                                            )}
+                                        </div>
+                                    );
+                                })}
                             </div>
                         )}
-                    </div>
+                    {/* Đóng thẻ Stage Div */}
+                    </div> 
                 ))}
             </div>
-        </div>
+        {/* Đóng thẻ Container Div */}
+        </div> 
     );
 }

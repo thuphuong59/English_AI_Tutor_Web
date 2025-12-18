@@ -88,7 +88,15 @@ async def get_quiz_questions(session_id: int, user_id: str = Depends(get_current
          print(f"Error fetching questions for {session_id}: {e}")
          raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="Failed to retrieve questions.")
 
-
+@router.get("/{session_id}/result")
+async def get_result(session_id: int):
+    # Router gọi sang Service
+    result = await quiz_grammar_service.get_quiz_result_by_session(session_id)
+    
+    if not result:
+        raise HTTPException(status_code=404, detail="Quiz session not found")
+        
+    return result
 @router.post("/{session_id}/submit", response_model=schemas.QuizResultSummary)
 async def submit_quiz_answers(
     session_id: int, 
@@ -106,3 +114,4 @@ async def submit_quiz_answers(
     )
     
     return results
+

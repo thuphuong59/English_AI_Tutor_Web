@@ -6,7 +6,7 @@ from fastapi_app.schemas.vocabulary import SuccessResponse
 from fastapi_app import schemas
 from fastapi_app.dependencies import get_current_user 
 from fastapi_app.services import quizgame as quiz_service
-
+from fastapi_app.services.quizgame import logger
 router = APIRouter(tags=["Quiz Game"])
 
 @router.get(
@@ -69,6 +69,7 @@ async def save_quiz_result( # 🚨 Đã chuyển thành ASYNC
     """
     API Endpoint: Lưu kết quả bài kiểm tra và cập nhật Roadmap nếu task liên quan.
     """
+    logger.info(f"🔥 SAVE QUIZ RESULT lesson_id = {result_data.lesson_id}")
     try:
         user_id = str(current_user.id)
         

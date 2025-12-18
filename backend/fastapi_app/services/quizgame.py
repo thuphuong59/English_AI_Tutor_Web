@@ -235,16 +235,20 @@ async def process_save_quiz_result(result_data: QuizResultCreate, user_id: str):
     Xử lý logic tính toán điểm và gọi CRUD để lưu. (Không gọi Roadmap).
     """
     try:
-        # Tính phần trăm điểm
-        percentage = 0.0
+        normalized_score = 0.0
         if result_data.total_questions > 0:
-            percentage = (result_data.score / result_data.total_questions) * 100
+            normalized_score = round(
+                result_data.score / result_data.total_questions,
+                4
+            )
+
+        percentage = round(normalized_score * 100, 2)
 
         #  (Data Preparation)
         data_to_insert = {
             "user_id": user_id,
             "deck_id": result_data.deck_id,
-            "score": result_data.score,
+            "score": normalized_score,
             "total_questions": result_data.total_questions,
             "percentage": round(percentage, 2),
             "lesson_id": result_data.lesson_id # ✅ ĐÃ THÊM: Lưu lesson_id vào bảng lịch sử
@@ -266,13 +270,14 @@ async def process_save_quiz_result(result_data: QuizResultCreate, user_id: str):
 # 🚨 HÀM MỚI: XỬ LÝ TOÀN BỘ QUÁ TRÌNH HOÀN TẤT QUIZ (ORCHESTRATOR)
 
 
-logger = logging.getLogger(__name__)
+logger = logging.getLogger(__name__) 
+MAX_ATTEMPTS = 4 # Hằng số giới hạn lượt thử (giữ nguyên 4)
+MASTERY_THRESHOLD = 0.80 # Đã sửa ngưỡng về 0.80 (80%) để đồng nhất với logic trước
 
-MASTERY_THRESHOLD = 0.2 
 async def process_quiz_completion(user_id: str, result_data: QuizResultCreate):
     """
     Hàm điều phối cho Quiz Vocabulary: Tính điểm, lưu lịch sử, 
-    và cập nhật Roadmap TRỰC TIẾP bằng cách thao tác DB.
+    và cập nhật Roadmap TRỰC TIẾP bằng cách thao tác DB, bao gồm logic đếm lượt thử.
     """
     try:
         if admin_supabase is None:
@@ -284,44 +289,64 @@ async def process_quiz_completion(user_id: str, result_data: QuizResultCreate):
         else:
             score = result_data.score / result_data.total_questions
         
+        # Ngưỡng Mastery hiện tại là 0.80 (80%)
         mastery_achieved = score >= MASTERY_THRESHOLD
         lesson_id_to_mark = result_data.lesson_id
 
-        # 🚨 DEBUG 1: Kiểm tra điều kiện đầu vào
         logger.info(f"DEBUG INPUT: Lesson={lesson_id_to_mark}, Score={score:.2f}, Mastery={mastery_achieved}")
 
         # 2. LƯU LỊCH SỬ QUIZ CHI TIẾT 
         await process_save_quiz_result(result_data, user_id) 
 
-        # 3. CẬP NHẬT ROADMAP (LOGIC GỘP)
-        if lesson_id_to_mark and mastery_achieved:
+        # 3. CẬP NHẬT ROADMAP (LOGIC GỘP): Cần chạy MỌI LÚC để ghi nhận lượt thử
+        if lesson_id_to_mark:
             logger.info(f"Triggering direct roadmap update for {lesson_id_to_mark} (Voca). Score: {score}")
 
             # 3a. Lấy bản ghi Roadmap hiện tại (Sử dụng run_sync vì hàm là def)
             roadmap_record = await anyio.to_thread.run_sync(
-                assessment_service.get_user_roadmap, # Hàm def cần chạy
-                user_id # Đối số truyền vào hàm
+                assessment_service.get_user_roadmap, 
+                user_id 
             )
             
-            # 🚨 DEBUG 2: Kiểm tra dữ liệu Roadmap nhận được
-            if roadmap_record is False: # Nếu get_user_roadmap trả về False khi lỗi DB
+            if roadmap_record is False: 
                  logger.error(f"DEBUG ROADMAP: get_user_roadmap returned False (DB connection failed).")
                  return {"status": "error", "message": "Failed to fetch roadmap data."}
 
             if roadmap_record and isinstance(roadmap_record, dict) and roadmap_record.get('data'):
                 
-                # 🚨 DEBUG 3: Xác nhận tiến hành cập nhật
-                logger.info(f"DEBUG ROADMAP: Proceeding to update Roadmap ID {roadmap_record.get('id')}")
-                
                 current_roadmap_data = roadmap_record['data']
                 current_progress = current_roadmap_data.get('user_progress', {})
                 roadmap_id = roadmap_record.get('id')
 
-                # 3b. Cập nhật trạng thái của lesson_id đó
+                # LẤY TRẠNG THÁI CŨ CỦA LESSON
+                # Nếu lesson_id_to_mark chưa tồn tại, tạo dict cơ bản (type)
+                task_progress = current_progress.get(lesson_id_to_mark, {"type": "vocabulary"}) 
+                
+                # 4. 🚨 LOGIC MỚI: Tăng lượt thử và Xác định trạng thái
+                current_attempt = task_progress.get("attempt_count", 0) + 1
+                
+                new_status = "PENDING" 
+                new_completed = False 
+                
+                if mastery_achieved:
+                    new_completed = True
+                    new_status = "SUCCESS"
+                elif current_attempt >= MAX_ATTEMPTS:
+                    # Nếu hết lượt thử VÀ KHÔNG đạt Mastery
+                    new_completed = False
+                    new_status = "END_OF_ATTEMPTS" 
+                else:
+                    new_completed = False
+                    new_status = "PENDING"
+                    
+                
+                # 3b. Cập nhật trạng thái của lesson_id đó VỚI CÁC TRƯỜNG MỚI
                 update_data = {
-                    "completed": mastery_achieved, 
-                    "score": round(score * 100), 
-                    "type": "vocabulary"
+                    **task_progress, 
+                    "completed": new_completed, 
+                    "score": score, 
+                    "attempt_count": current_attempt, 
+                    "status": new_status              
                 }
 
                 current_progress[lesson_id_to_mark] = update_data
@@ -329,19 +354,84 @@ async def process_quiz_completion(user_id: str, result_data: QuizResultCreate):
 
                 # 3c. Lưu lại toàn bộ bản ghi roadmaps
                 if roadmap_id:
-                    admin_supabase.table("roadmaps") \
-                        .update({"data": current_roadmap_data}) \
-                        .eq("id", roadmap_id) \
-                        .execute()
+                    # 🚨 SỬA LỖI CÚ PHÁP run_sync: Định nghĩa hàm sync để gọi execute() bên trong
+                    def db_update_sync():
+                        return admin_supabase.table("roadmaps") \
+                            .update({"data": current_roadmap_data}) \
+                            .eq("id", roadmap_id) \
+                            .execute()
+                            
+                    await anyio.to_thread.run_sync(db_update_sync)
                     
-                    logger.info(f"✅ [PROGRESS TRACKED] Vocabulary {lesson_id_to_mark} updated successfully.")
-            else:
-                logger.warning(f"Roadmap data not valid or not found for user {user_id}. Skipping roadmap update.")
+                    logger.info(f"✅ [PROGRESS TRACKED] Vocabulary {lesson_id_to_mark} updated (Status: {new_status}).")
 
-        return {"status": "success"}
+                    # 5. LOGIC KIỂM TRA HOÀN THÀNH TUẦN VÀ KÍCH HOẠT ĐÁNH GIÁ LẠI
+                    try:
+                        # 5a. Lấy dữ liệu tuần hiện tại (sử dụng hàm helper)
+                        completed_week_data = assessment_service.get_week_data_by_lesson_id(
+                            lesson_id_to_mark, 
+                            current_roadmap_data
+                        )
+                        
+                        if completed_week_data:
+                            week_number = completed_week_data.get('week_number', 'UNKNOWN')
+
+                            # 5b. Kiểm tra hoàn thành tuần
+                            is_week_resolved = assessment_service.check_week_completion(
+                                current_progress, 
+                                completed_week_data
+                            ) 
+                            completed_week_data = assessment_service.get_week_data_by_lesson_id(lesson_id_to_mark, current_roadmap_data)
+                            if is_week_resolved:
+                                logger.info(f"🚨 [WEEK STATUS] Tuần {week_number} ĐÃ HOÀN TẤT (DONE - All tasks resolved).")
+                                summary_record = await assessment_service.create_weekly_summary_record(
+                                    user_id=user_id,
+                                    completed_week_data=completed_week_data, # 🚨 DỮ LIỆU TUẦN CHÍNH XÁC (W1, không phải W12)
+                                    current_progress=current_progress,       # Tiến độ mới nhất
+                                    admin_supabase=admin_supabase
+                                )
+                                
+                                if summary_record:
+                                    logger.info(f"✅ Weekly Summary record P{summary_record.get('phase')}_W{summary_record.get('week_number')} successfully created.")
+                                    logger.debug(f"DEBUG: Summary object before passing to AI: {summary_record}")
+                                # 🚨 GỌI HÀM ĐIỀU PHỐI VÀ ĐIỀU CHỈNH BẰNG AI
+                                    success = await assessment_service.generate_and_apply_adaptive_roadmap(
+                                        user_id,
+                                        summary_record,        # Kết quả đánh giá tuần N
+                                        current_roadmap_data,  # Roadmap gốc
+                                        admin_supabase
+                                    )
+
+                                    if success:
+                                        logger.info("✅ SUCCESS: Đánh giá hoàn tất, AI đã điều chỉnh và cập nhật Roadmap tuần sau.")
+                                    else:
+                                        logger.error("❌ FAILED: Lỗi trong quá trình điều chỉnh Roadmap AI.")
+                                else:
+                                    logger.error("❌ Lỗi: Không thể chèn bản ghi tóm tắt tuần.")
+                                
+                            else:
+                                logger.info(f"☑️ [WEEK STATUS] Tuần {week_number} CHƯA HOÀN TẤT (NOT DONE - PENDING tasks remain).")                                
+                            if is_week_resolved:
+                                logger.info(f"🚨 DEBUG WEEK CHECK: WEEK {week_number} COMPLETED/RESOLVED. KÍCH HOẠT weekly_assessment.")
+                                user_level = current_roadmap_data.get('current_level', 'A2')
+                            else:
+                                logger.info(f"☑️ DEBUG WEEK CHECK: WEEK {week_number} NOT fully resolved yet. Status check passed.")
+                        else:
+                            logger.warning(f"DEBUG WEEK CHECK: Lesson ID {lesson_id_to_mark} not found in Roadmap structure.")
+
+                    except Exception as e:
+                        logger.warning(f"Lỗi khi kiểm tra hoàn thành tuần: {e}")
+                        pass # Cho phép tiếp tục thực thi
+
+                else:
+                    logger.warning(f"Roadmap ID not found for user {user_id}. Skipping roadmap update.")
+
+            return {"status": "success"}
 
     except HTTPException as e:
         raise e
     except Exception as e:
         logger.error(f"Lỗi trong quá trình hoàn tất Quiz Vocabulary (Gộp Logic): {e}")
+        # Ghi log chi tiết lỗi, nhưng trả về HTTPException thân thiện
         raise HTTPException(status_code=500, detail=f"Lỗi khi hoàn tất bài Quiz: {str(e)}")
+    

@@ -1,7 +1,7 @@
 def build_roadmap_prompt(
     mcq_analysis,
     weak_points_list,
-    speaking_transcript,
+    speaking_overall,
     prefs_dict,
 ):
     return f"""
@@ -13,7 +13,7 @@ Learner information:
 
     Key weaknesses: {", ".join(weak_points_list) if weak_points_list else "Not clearly identified"}
 
-    Sample speaking transcript: "{speaking_transcript}"
+    Speaking overall evaluation: "{speaking_overall}"
 
     Daily learning commitment: {prefs_dict['daily_commitment']}
 
@@ -23,7 +23,7 @@ Learner information:
 
     Strict requirements:
 
-    Analyze the MCQ result ({mcq_analysis}), speaking skills ({speaking_transcript}), and response latency to self-evaluate the learner’s current level (e.g., A1, A2, B1...).
+    Analyze the MCQ result ({mcq_analysis}), ({speaking_overall}) and response latency to self-evaluate the learner’s current level (e.g., A1, A2, B1...).
 
     Write an overall summary (150–250 words) in Vietnamese for the "user_summary" key.
 
@@ -123,3 +123,45 @@ Learner information:
     Do NOT use Vietnamese or any other language.
     Start immediately with the JSON, no additional text.
     """
+    
+def build_roadmap_adjustment_prompt(
+    last_week_number,
+    weekly_summary_record,
+    next_week_data_base,
+    next_week_json,
+    dynamic_phase_label,
+):
+    return f"""
+    You are a Personalized Learning Roadmap Adjustment System. Your task is to thoroughly analyze the learning results from the previous week in order to adjust the learning content for the following week.
+
+
+    1. PREVIOUS WEEK ASSESSMENT DATA (Week {last_week_number}):
+    {weekly_summary_record}
+
+
+    2. NEXT WEEK ROADMAP STRUCTURE (Week {next_week_data_base.get('week_number')} – ORIGINAL JSON FORMAT):
+    {next_week_json}
+
+
+    YOUR ADJUSTMENT RULES:
+    - If there are any Tasks in the 'review_tasks' list of Grammar, Vocabulary, or Speaking, **insert** these Tasks at the **beginning** of the 'items' list of the corresponding topic in the next week’s structure.
+
+
+    - FOR NEW REVIEW TASKS:
+    - Must include the key **"type": "review"**.
+    - The "title" key must have the prefix **"REVIEW: "**.
+    - **MUST** include the **"lesson_id"** key with a unique format, in which the 5th character represents the corresponding skill symbol (G, V, or S).
+    Examples:
+    * Grammar Review: **{dynamic_phase_label}_W{next_week_data_base.get('week_number')}_G_Review1**
+    * Vocabulary Review: **{dynamic_phase_label}_W{next_week_data_base.get('week_number')}_V_Review1**
+    * Speaking Review: **{dynamic_phase_label}_W{next_week_data_base.get('week_number')}_S_Review1**
+
+
+    - If the average score of a skill (avg_score or avg_mastery) is too low (below 0.6), you may **remove** 1 or 2 new theory/vocabulary Tasks in Week N+1 to reduce workload.
+    - DO NOT change 'week_number' and 'phase' under any circumstances.
+    - DO NOT add any explanatory text; return **ONLY the JSON OBJECT** of the **ADJUSTED NEXT WEEK ROADMAP STRUCTURE** (including week_number, grammar, vocabulary, speaking, etc.).
+
+
+    Please return the adjusted JSON of the NEXT WEEK ROADMAP STRUCTURE in English.
+    """
+        

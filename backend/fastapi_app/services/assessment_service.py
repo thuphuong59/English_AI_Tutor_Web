@@ -1,6 +1,6 @@
 # backend/fastapi_app/services/assessment_service.py
 
-from typing import Dict, List, Any
+from typing import Dict, List, Any, Union
 from tempfile import NamedTemporaryFile
 from fastapi import UploadFile, HTTPException, Request
 from fastapi_app.schemas.test_schemas import PreferenceData, FinalAssessmentSubmission, QuizQuestion 
@@ -13,7 +13,8 @@ from starlette.concurrency import run_in_threadpool
 from google.genai.errors import APIError
 import base64, mimetypes
 from fastapi_app.database import admin_supabase
-from fastapi_app.prompts.roadmap import build_roadmap_prompt
+from fastapi_app.prompts.roadmap import build_roadmap_prompt, build_roadmap_adjustment_prompt
+import anyio
 import re # Import thư viện regex
 
 logger = logging.getLogger(__name__)
@@ -27,55 +28,7 @@ except ImportError:
 
 
 # --- HÀM 1: STT VÀ PHÂN TÍCH TRANSCRIPT ---
-
-async def run_stt_and_analysis_sync(audio_path: str, client):
-    """Thực hiện Speech-to-Text (STT) và tính số từ."""
-    def _sync_call():
-        with open(audio_path, "rb") as f:
-            audio_data = f.read()
-
-        return client.models.generate_content(
-            model="models/gemini-2.0-flash",
-            contents=[
-                {
-                    "role": "user",
-                    "parts": [
-                        {"text": "Please transcribe this audio."},
-                        {
-                            "inline_data": {
-                                "mime_type": "audio/mpeg", # Giả định mime_type phổ biến
-                                "data": audio_data,
-                            }
-                        }
-                    ]
-                }
-            ]
-        )
-
-    response = await run_in_threadpool(_sync_call)
-    transcript = response.text
-    word_count = len(transcript.split())  # tính số từ trong transcript
-
-    return {
-        "transcript": transcript,
-        "word_count": word_count
-    }
     
-async def analyze_transcript_with_gemini(transcript: str, client: genai.Client) -> str:
-    """Gọi Gemini để đánh giá ngữ pháp/từ vựng trong transcript của người dùng."""
-    analysis_prompt = f"Phân tích văn bản: '{transcript}' về lỗi ngữ pháp, chất lượng từ vựng, và đưa ra 2 gợi ý cải thiện."
-    try:
-        analysis_response = await run_in_threadpool(
-            client.models.generate_content,
-            model=GEMINI_MODEL,
-            contents=[analysis_prompt]
-        )
-        return analysis_response.text.strip()
-    except Exception as e:
-        logger.error(f"Lỗi phân tích Transcript LLM: {e}")
-        return "Lỗi phân tích. Vui lòng thử lại bài nói."
-
-
 # --- HÀM 2: CHẤM ĐIỂM TRẮC NGHIỆM THỰC TẾ ---
 
 def calculate_mcq_score(
@@ -161,10 +114,83 @@ def initialize_user_progress(learning_phases: List[Dict[str, Any]]) -> Dict[str,
                             user_progress[lesson_id] = {
                                 "completed": False, 
                                 "score": None,
-                                "type": skill_type # Lưu loại kỹ năng để dễ truy vấn sau này
+                                "type": skill_type, # Lưu loại kỹ năng để dễ truy vấn sau này
+                                "attempt_count": 0,
+                                "status": "PENDING"
                             }
                             
     return user_progress
+async def analyze_speaking_audio(audio_path: str, client):
+    def _sync_call():
+        with open(audio_path, "rb") as f:
+            audio_bytes = f.read()
+
+        return client.models.generate_content(
+            model="gemini-2.5-flash-preview-09-2025",
+            contents=[
+                {
+                    "role": "user",
+                    "parts": [
+                        {
+                            "text": """
+                            You are an English speaking assessment engine.
+
+                            Tasks:
+                            1. Transcribe the audio.
+                            2. Give a SHORT overall evaluation of speaking ability.
+                            3. Identify MAIN speaking weaknesses based on grammar, vocabulary, pronunciation, or fluency.
+
+                            Return ONLY valid JSON:
+                            {
+                            "transcript": "",
+                            "speaking_overall": "",
+                            "speaking_weakness": []
+                            }
+
+                            Rules:
+                            - speaking_overall: 1–2 sentences
+                            - speaking_weakness: list of short phrases (can be empty)
+                            - No scores
+                            - No word count
+                            """
+                        },
+                        {
+                            "inline_data": {
+                                "mime_type": "audio/mpeg",
+                                "data": audio_bytes
+                            }
+                        }
+                    ]
+                }
+            ],
+        )
+
+    try:
+        response = await run_in_threadpool(_sync_call)
+        raw_text = response.text.strip()
+
+        if raw_text.startswith("```"):
+            raw_text = raw_text.replace("```json", "").replace("```", "").strip()
+
+        data = json.loads(raw_text)
+
+        return {
+            "transcript": data.get("transcript", ""),
+            "speaking_overall": data.get(
+                "speaking_overall",
+                "Speaking ability could not be fully assessed."
+            ),
+            "speaking_weakness": data.get("speaking_weakness", []),
+        }
+
+    except Exception as e:
+        logger.error(f"[Speaking Gemini Error] {e}")
+
+        # 🔥 FALLBACK QUAN TRỌNG
+        return {
+            "transcript": "",
+            "speaking_overall": "Speaking assessment is temporarily unavailable due to system limits."
+        }
 async def analyze_and_generate_roadmap(
     payload_data: FinalAssessmentSubmission,
     audio_files: Dict[str, UploadFile]
@@ -182,150 +208,50 @@ async def analyze_and_generate_roadmap(
     # --- 2. XỬ LÝ SPEAKING ---
     full_speaking_analysis = []
 
-    # Tạo map từ file_key (dù frontend gửi gì) về tên file thực tế trong form
-    file_key_to_form_key = {}
-    for form_key in audio_files.keys():
-        # form_key có thể là 'audio_file_21' hoặc 'audio_file_21[]' hoặc 'audio_21' tùy frontend
-        logger.debug(f"Processing form_key for mapping: {form_key}")
-        if isinstance(form_key, str):
-            key = form_key
-            # direct numeric extraction
-            if key.startswith("audio_file_"):
-                num = key.replace("audio_file_", "")
-                file_key_to_form_key[num] = form_key
-                try:
-                    file_key_to_form_key[int(num)] = form_key
-                except ValueError:
-                    pass
-            else:
-                # try extract last numeric part
-                m = re.search(r"(\d+)", key)
-                if m:
-                    num = m.group(1)
-                    file_key_to_form_key[num] = form_key
-                    try:
-                        file_key_to_form_key[int(num)] = form_key
-                    except ValueError:
-                        pass
-                # also map the raw key itself
-                file_key_to_form_key[key] = form_key
+    if audio_files and payload_data.speaking_data:
+        for speaking_data_item in payload_data.speaking_data:
+            raw_key = speaking_data_item.file_key
 
-    logger.info(f"[service] File key mapping (after scan): {file_key_to_form_key}")
+            # Fallback: chỉ lấy file đầu tiên nếu FE gửi 1 file
+            audio_file = next(iter(audio_files.values()), None)
 
-    # Log speaking_data coming in payload for debug
-    try:
-        logger.info(f"[service] speaking_data payload: {payload_data.speaking_data}")
-    except Exception:
-        logger.exception("Không thể log speaking_data")
-
-    for speaking_data_item in payload_data.speaking_data:
-        raw_key = speaking_data_item.file_key
-        logger.info(f"[service] Raw file_key từ frontend: {raw_key} (type: {type(raw_key)})")
-
-        # Chuẩn hóa key: thử tất cả các khả năng
-        possible_keys = []
-        try:
-            raw_key_str = str(raw_key).strip()
-            possible_keys = [
-                raw_key_str,
-                raw_key_str.lstrip("Qq"),
-                raw_key_str.replace("question_", ""),
-                f"audio_file_{raw_key_str}",
-                f"audio_{raw_key_str}",
-            ]
-        except Exception:
-            possible_keys = [str(raw_key)]
-
-        # Nếu raw_key là số dạng int/float
-        if isinstance(raw_key, (int, float)):
-            possible_keys.append(str(int(raw_key)))
-
-        # Deduplicate
-        seen = set()
-        possible_keys = [k for k in possible_keys if not (k in seen or seen.add(k))]
-
-        logger.debug(f"[service] possible_keys to try for raw_key {raw_key}: {possible_keys}")
-
-        matched_form_key = None
-        for k in possible_keys:
-            # 1) direct in mapping dict
-            if k in file_key_to_form_key:
-                matched_form_key = file_key_to_form_key[k]
-                logger.info(f"[service] matched via file_key_to_form_key: {k} -> {matched_form_key}")
-                break
-            # 2) direct form key present
-            if k in audio_files:
-                matched_form_key = k
-                logger.info(f"[service] matched direct form key: {k}")
-                break
-            # 3) try with audio_file_ prefix
-            prefix = f"audio_file_{k}"
-            if prefix in audio_files:
-                matched_form_key = prefix
-                logger.info(f"[service] matched with prefix: {prefix}")
-                break
-
-        audio_file = audio_files.get(matched_form_key) if matched_form_key else None
-
-        if not audio_file:
-            logger.warning(f"Không tìm thấy audio cho file_key={raw_key} (đã thử: {possible_keys})")
-            logger.warning(f"Các key có sẵn: {list(audio_files.keys())}")
-            # fallback: nếu chỉ có 1 file, giả sử map vào đó (chỉ để debug, có thể loại bỏ sản xuất)
-            if len(audio_files) == 1 and not full_speaking_analysis: # Chỉ dùng fallback nếu đây là file đầu tiên
-                only_key = list(audio_files.keys())[0]
-                logger.warning(f"[service] Fallback: chỉ có 1 file upload, dùng {only_key}")
-                audio_file = audio_files.get(only_key)
-            else:
+            if not audio_file:
+                logger.warning(f"[Speaking] No audio found for Q{raw_key}")
                 continue
-        else:
-            logger.info(f"ĐÃ TÌM THẤY audio cho Q{raw_key}: {matched_form_key} -> filename: {getattr(audio_file,'filename',None)}")
 
-        # --- Kiểm tra nhanh nội dung file (size) trước khi ghi temp ---
-        try:
-            # Ở đây chỉ để log size approximate nếu có attribute .file
-            file_obj = audio_file.file
-            file_obj.seek(0, 2)
-            size = file_obj.tell()
-            file_obj.seek(0)
-            logger.info(f"[service] File info - key: {matched_form_key}, filename: {getattr(audio_file,'filename',None)}, size_bytes: {size}")
-        except Exception:
-            logger.exception("Không thể lấy file size")
+            tmp_path = None
+            try:
+                file_bytes = await audio_file.read()
+                suffix = os.path.splitext(audio_file.filename)[1] or ".mp3"
 
-        # --- Từ đây giữ nguyên xử lý file ---
-        tmp_path = None
-        try:
-            file_content = await audio_file.read()
-            suffix = os.path.splitext(audio_file.filename)[1] or ".mp3"
+                with NamedTemporaryFile(delete=False, suffix=suffix) as tmp:
+                    tmp_path = tmp.name
+                    await run_in_threadpool(tmp.write, file_bytes)
 
-            with NamedTemporaryFile(delete=False, suffix=suffix) as tmp:
-                tmp_path = tmp.name
-                await run_in_threadpool(tmp.write, file_content)
+                speaking_result = await analyze_speaking_audio(tmp_path, client)
 
-            logger.info(f"[service] Viết tạm file: {tmp_path}")
+                # Nếu không có lời nói → bỏ qua
+                if not speaking_result.get("transcript") and speaking_result.get("status") == "FALLBACK":
+                    logger.warning(f"[Speaking] Gemini unavailable for Q{raw_key} (quota or overload)")
 
-            # STT
-            stt_result = await run_stt_and_analysis_sync(tmp_path, client)
+                full_speaking_analysis.append({
+                    "question_id": raw_key,
+                    "transcript": speaking_result["transcript"],
+                    "speaking_overall": speaking_result["speaking_overall"],
+                    "latency_s": speaking_data_item.latency_ms / 1000,
+                    "status": "OK",
+                })
 
-            # Gemini Grammar
-            llm_comment = await analyze_transcript_with_gemini(stt_result['transcript'], client)
+            except Exception as e:
+                logger.warning(f"[Speaking] Failed Q{raw_key}: {e}")
 
-            full_speaking_analysis.append({
-                "question_id": raw_key,
-                "transcript": stt_result['transcript'],
-                "word_count": stt_result['word_count'],
-                "latency_s": speaking_data_item.latency_ms / 1000,
-                "llm_grammar_comment": llm_comment,
-            })
+            finally:
+                if tmp_path and os.path.exists(tmp_path):
+                    try:
+                        os.unlink(tmp_path)
+                    except:
+                        pass
 
-        except Exception as e:
-            logger.exception(f"Lỗi xử lý audio cho Q{raw_key}: {e}")
-
-        finally:
-            if tmp_path and os.path.exists(tmp_path):
-                try:
-                    os.unlink(tmp_path)
-                except:
-                    pass
     
     # --- 3. XÂY DỰNG PROMPT CHO GEMINI và tạo roadmap ---
     prefs = payload_data.preferences
@@ -333,23 +259,27 @@ async def analyze_and_generate_roadmap(
 
     weak_points_list = list(mcq_analysis.get('weak_topics', []))
     has_speaking = len(full_speaking_analysis) > 0
-    if has_speaking and full_speaking_analysis[0]['latency_s'] > 1.5:
-        weak_points_list.append("Phản xạ chậm (Latency > 1.5s)")
 
-    speaking_transcript = full_speaking_analysis[0]['transcript'] if has_speaking else "Không có dữ liệu nói."
+    speaking_overall = (
+        full_speaking_analysis[0]["speaking_overall"]
+        if has_speaking
+        else "Không có đánh giá speaking."
+    )
 
+    for weakness in speaking_result.get("speaking_weakness", []):
+        weak_points_list.append(f"Speaking: {weakness}")
     # CẬP NHẬT PROMPT ĐỂ TẠO CẤU TRÚC JSON CHI TIẾT THEO YÊU CẦU
     roadmap_prompt = build_roadmap_prompt(
         mcq_analysis=mcq_analysis,
         weak_points_list=weak_points_list,
-        speaking_transcript=speaking_transcript,
+        speaking_overall=speaking_overall,
         prefs_dict=prefs_dict,
     )
 
     try:
         roadmap_response = await run_in_threadpool(
             client.models.generate_content,
-            model=GEMINI_MODEL,
+            model="gemini-2.5-flash",
             contents=[roadmap_prompt],
             config=g_types.GenerateContentConfig(response_mime_type="application/json")
         )
@@ -472,3 +402,390 @@ def get_user_roadmap(user_id: str):
     except Exception as e:
         logger.exception(f"[get_user_roadmap] Lỗi truy xuất roadmap: {e}")
         return None
+    
+def check_week_completion(current_progress: Dict[str, Any], completed_week_data: Dict[str, Any]) -> bool:
+    """
+    Kiểm tra xem tất cả các Task trong tuần đã hoàn thành (SUCCESS) 
+    hay đã hết lượt thử (END_OF_ATTEMPTS) hay chưa.
+    """
+    
+    # Lấy danh sách Lesson ID của tuần đó
+    all_lesson_ids_in_week = []
+    
+    for section in ['grammar', 'vocabulary', 'speaking']:
+        items = completed_week_data.get(section, {}).get('items', [])
+        
+        # 🚨 SỬA LỖI: Dùng .get() và lọc các Task không có ID để tránh KeyError
+        for item in items:
+            lesson_id = item.get('lesson_id')
+            if lesson_id is None:
+                logger.warning(f"⚠️ Task bị thiếu 'lesson_id' trong tuần {completed_week_data.get('week_number')}: {item}")
+                continue # Bỏ qua item này và tiếp tục
+
+            all_lesson_ids_in_week.append(lesson_id)
+        
+    if not all_lesson_ids_in_week:
+        return False # Tuần không có Task nào
+
+    for lesson_id in all_lesson_ids_in_week:
+        progress = current_progress.get(lesson_id)
+        
+        # Nếu Task chưa được thực hiện lần nào (None) hoặc có trạng thái PENDING
+        if progress is None or progress.get('status') == 'PENDING':
+            # Nếu có bất kỳ Task nào còn PENDING, tuần học CHƯA kết thúc
+            return False 
+
+    # Nếu tất cả các Task đều là SUCCESS hoặc END_OF_ATTEMPTS
+    return True
+
+def get_week_data_by_lesson_id(lesson_id: str, roadmap_data: Dict[str, Any]) -> Dict[str, Any] | None:
+    """
+    Duyệt qua Roadmap để tìm bản ghi của Tuần chứa lesson_id này.
+    """
+    for phase in roadmap_data.get('learning_phases', []):
+        for week in phase.get('weeks', []):
+            for section in ['grammar', 'vocabulary', 'speaking']:
+                items = week.get(section, {}).get('items', [])
+                # Kiểm tra nếu bất kỳ item nào có lesson_id khớp
+                if any(item.get('lesson_id') == lesson_id for item in items):
+                    return week
+    return None
+# def get_week_data_by_lesson_id(lesson_id: str, roadmap_data: Dict[str, Any]) -> Dict[str, Any] | None:
+#     """Duyệt qua Roadmap để tìm bản ghi của Tuần chứa lesson_id này."""
+#     for phase in roadmap_data.get('learning_phases', []):
+#         for week in phase.get('weeks', []):
+#             for section in ['grammar', 'vocabulary', 'speaking']:
+#                 items = week.get(section, {}).get('items', [])
+#                 if any(item.get('lesson_id') == lesson_id for item in items):
+#                     return week
+#     return None
+
+async def create_weekly_summary_record(
+    user_id: str,
+    completed_week_data: Dict[str, Any],
+    current_progress: Dict[str, Any],
+    admin_supabase
+) -> Union[Dict, bool]:
+
+    try:
+        week_number = completed_week_data["week_number"]
+        first_item = next(
+            iter(completed_week_data.get("grammar", {}).get("items", [])),
+            None
+        )
+        phase = first_item["lesson_id"].split("_")[0] if first_item else "P0"
+
+    except Exception as e:
+        logger.error(f"❌ Invalid completed_week_data structure: {e}")
+        return False
+
+    def _aggregate_and_insert_sync():
+
+        summaries = {}
+        total_tasks = 0
+        resolved_tasks = 0
+        review_required = False
+
+        for skill in ["grammar", "vocabulary", "speaking"]:
+            items = completed_week_data.get(skill, {}).get("items", [])
+            scores = []
+            review_topics = []
+            completed = 0
+
+            for item in items:
+                lesson_id = item["lesson_id"]
+                topic = item.get("title", "Unknown")
+                progress = current_progress.get(lesson_id, {})
+
+                status = progress.get("status")
+                score = progress.get("score", 0)
+
+                total_tasks += 1
+
+                if status in ("SUCCESS", "END_OF_ATTEMPTS"):
+                    resolved_tasks += 1
+
+                if status == "SUCCESS":
+                    completed += 1
+                    scores.append(score)
+
+                elif status == "END_OF_ATTEMPTS":
+                    review_topics.append(topic)
+                    scores.append(score)
+                    review_required = True
+
+            avg_score = round(sum(scores) / len(scores), 2) if scores else 0
+
+            summaries[f"{skill}_summary"] = {
+                "completed_tasks": completed,
+                "review_tasks": review_topics,
+                "avg_score": avg_score if skill != "vocabulary" else None,
+                "avg_mastery": avg_score if skill == "vocabulary" else None
+            }
+
+        completion_rate = round(
+            resolved_tasks / total_tasks, 4
+        ) if total_tasks > 0 else 0
+
+        insert_data = {
+            "user_id": user_id,
+            "phase": phase,
+            "week_number": week_number,
+            "speaking_summary": summaries["speaking_summary"],
+            "grammar_summary": summaries["grammar_summary"],
+            "vocabulary_summary": summaries["vocabulary_summary"],
+            "completion_rate": completion_rate,
+            "review_required": review_required
+        }
+
+        result = (
+            admin_supabase
+            .table("weekly_learning_summary")
+            .insert(insert_data)
+            .execute()
+        )
+
+        return result.data[0] if result.data else False
+
+    try:
+        record = await anyio.to_thread.run_sync(_aggregate_and_insert_sync)
+        logger.info(f"✅ Weekly Summary P{phase}_W{week_number} inserted")
+        return record
+
+    except Exception as e:
+        logger.error(f"❌ Failed to insert weekly summary: {e}")
+        return False
+    
+logger = logging.getLogger(__name__)
+
+# --- HÀM MỚI: ĐIỀU CHỈNH ROADMAP BẰNG AI ---
+
+async def generate_and_apply_adaptive_roadmap(
+    user_id: str,
+    weekly_summary_record: Dict[str, Any], # Bản ghi tóm tắt tuần N
+    current_roadmap_data: Dict[str, Any], # Toàn bộ Roadmap
+    admin_supabase
+) -> bool:
+    """
+    Sử dụng AI để phân tích kết quả tuần trước (N) và điều chỉnh nội dung tuần sau (N+1).
+    """
+    phase_index = -1
+    last_week_index = -1
+    next_phase_index = -1
+    # 1. XÁC ĐỊNH TUẦN VỪA KẾT THÚC VÀ TUẦN TIẾP THEO
+    try:
+        last_week_number = weekly_summary_record.get('week_number')
+        
+        # Lấy nhãn Phase ngắn gọn từ Summary (Ví dụ: 'P1')
+        raw_phase_label = weekly_summary_record.get('phase') 
+        
+        if not raw_phase_label:
+            logger.error("Phase label 'phase' not found in summary record.")
+            return False
+
+        # 🚨 SỬA LỖI #1: CHUẨN HÓA Phase Label ('P1' -> 'Phase 1')
+        # Logic: Tìm kiếm P (hoặc bất kỳ chữ cái nào) theo sau là số
+        match = re.match(r'[A-Z](\d+)', raw_phase_label, re.IGNORECASE)
+        if match:
+             # Tạo chuỗi tìm kiếm hoàn hảo: Ví dụ: P1 -> Phase 1
+             search_phase_label = f"Phase {match.group(1)}"
+        else:
+             # Fallback nếu định dạng không phải Px
+             search_phase_label = raw_phase_label
+        
+        # --- DEBUG KHÓA TÌM KIẾM ---
+        logger.debug(f"DEBUG: Searching for Phase Label: {search_phase_label}") 
+        logger.debug(f"DEBUG: Target Week Number: {last_week_number}")
+        # ----------------------------
+
+        # 🚨 SỬA LỖI #2: Tìm kiếm Phase index. Dùng `in` để tìm 'Phase 1' 
+        # bên trong chuỗi dài "Phase 1: Building Active Foundations".
+        phase_index_completed = next( # Đổi tên biến để giữ index của Phase vừa hoàn thành
+            i for i, p in enumerate(current_roadmap_data['learning_phases']) 
+            if p.get('phase_name') and search_phase_label in p['phase_name']
+        )
+        
+        # Tìm index của tuần vừa kết thúc
+        last_week_index = next(
+            i for i, w in enumerate(current_roadmap_data['learning_phases'][phase_index_completed]['weeks']) 
+            if w.get('week_number') == last_week_number
+        )
+
+        next_phase_index = phase_index_completed # Index Phase cho tuần mới (mặc định là Phase cũ)
+        
+        # 1a. Tìm dữ liệu Tuần Mới (N+1)
+        if last_week_index + 1 < len(current_roadmap_data['learning_phases'][phase_index_completed]['weeks']):
+            # Tuần tiếp theo trong cùng Phase
+            next_week_index = last_week_index + 1
+            # Sử dụng phase_index_completed để tham chiếu Phase hiện tại
+            next_week_data_ref = current_roadmap_data['learning_phases'][phase_index_completed]['weeks'][next_week_index]
+        
+        elif phase_index_completed + 1 < len(current_roadmap_data['learning_phases']):
+            # Tuần đầu tiên của Phase tiếp theo
+            next_phase_index = phase_index_completed + 1 # Cập nhật chỉ mục Phase tiếp theo
+            next_week_index = 0
+            # Sử dụng next_phase_index đã cập nhật
+            next_week_data_ref = current_roadmap_data['learning_phases'][next_phase_index]['weeks'][next_week_index] 
+        else:
+            logger.info(f"💡 [ROADMAP] Người dùng đã hoàn thành toàn bộ Roadmap.")
+            return True
+        next_week_data_base = next_week_data_ref.copy() # Dữ liệu tuần N+1 gốc
+
+    except (StopIteration, IndexError) as e:
+        logger.error(f"❌ Lỗi tìm kiếm Phase/Week trong Roadmap: {e}")
+        return False
+    next_phase_name = current_roadmap_data['learning_phases'][next_phase_index]['phase_name']
+
+# Trích xuất số Phase từ tên (Ví dụ: '2' từ 'Phase 2')
+    match = re.search(r'Phase (\d+)', next_phase_name)
+    if match:
+        # Tạo nhãn Phase động (Ví dụ: 'P2')
+        dynamic_phase_label = f"P{match.group(1)}" 
+    else:
+        dynamic_phase_label = "Px"
+        # 2. XÂY DỰNG PROMPT CHO AI ĐIỀU CHỈNH
+    
+    # Chuyển dữ liệu tuần N+1 gốc sang JSON string để truyền vào Prompt
+    next_week_json = json.dumps(next_week_data_base, indent=2, ensure_ascii=False)
+    logger.debug(f"Next week JSON (before adjustment): {next_week_json}")
+    prompt = build_roadmap_adjustment_prompt(
+        last_week_number=last_week_number,
+        weekly_summary_record=json.dumps(weekly_summary_record, indent=2, ensure_ascii=False), # Cần đảm bảo đây là chuỗi JSON
+        next_week_data_base=next_week_data_base,
+        next_week_json=json.dumps(next_week_data_base, indent=2, ensure_ascii=False), # Cần đảm bảo đây là chuỗi JSON
+        dynamic_phase_label=dynamic_phase_label
+    )
+    # prompt = f"""
+    # You are a Personalized Learning Roadmap Adjustment System. Your task is to thoroughly analyze the learning results from the previous week in order to adjust the learning content for the following week.
+
+    # 1. PREVIOUS WEEK ASSESSMENT DATA (Week {last_week_number}):
+    # {json.dumps(weekly_summary_record, indent=2, ensure_ascii=False)}
+
+    # 2. NEXT WEEK ROADMAP STRUCTURE (Week {next_week_data_base.get('week_number')} – ORIGINAL JSON FORMAT):
+    # {next_week_json}
+
+    # YOUR ADJUSTMENT RULES:
+    #     - If there are any Tasks in the 'review_tasks' list of Grammar, Vocabulary, or Speaking, **insert** these Tasks at the **beginning** of the 'items' list of the corresponding topic in the next week’s structure.
+
+    #     - FOR NEW REVIEW TASKS:
+    #         - Must include the key **"type": "review"**.
+    #         - The "title" key must have the prefix **"REVIEW: "**.
+    #         - **MUST** include the **"lesson_id"** key with a unique format, in which the 5th character represents the corresponding skill symbol (G, V, or S). For example:
+    #             * Grammar Review: **{dynamic_phase_label}_W{next_week_data_base.get('week_number')}_G_Review1**
+    #             * Vocabulary Review: **{dynamic_phase_label}_W{next_week_data_base.get('week_number')}_V_Review1**
+    #             * Speaking Review: **{dynamic_phase_label}_W{next_week_data_base.get('week_number')}_S_Review1**
+
+    #     - If the average score of a skill (avg_score or avg_mastery) is too low (below 0.6), you may **remove** 1 or 2 new theory/vocabulary Tasks in Week N+1 to reduce workload.
+    #     - DO NOT change 'week_number' and 'phase' under any circumstances.
+    #     - DO NOT add any explanatory text; return **ONLY the JSON OBJECT** of the **ADJUSTED NEXT WEEK ROADMAP STRUCTURE** (including week_number, grammar, vocabulary, speaking, etc.).
+
+    # Please return the adjusted JSON of the NEXT WEEK ROADMAP STRUCTURE in English.
+    # """
+    # 3. GỌI GEMINI VÀ XỬ LÝ KẾT QUẢ
+    client = genai.Client()
+    try:
+        def _call_gemini_sync():
+            return client.models.generate_content(
+                model="gemini-2.5-flash",
+                contents=prompt,
+                config=g_types.GenerateContentConfig(
+                    response_mime_type="application/json"
+                )
+            )
+
+        response = await anyio.to_thread.run_sync(_call_gemini_sync)
+
+        modified_next_week_data = json.loads(response.text)
+        logger.info(f"✅ AI đã hoàn tất điều chỉnh cho Tuần {modified_next_week_data.get('week_number')}.")
+        
+    except (APIError, json.JSONDecodeError) as e:
+        logger.error(f"❌ Lỗi AI hoặc JSON khi điều chỉnh Roadmap: {e}. Sẽ sử dụng cấu trúc Roadmap gốc.")
+        modified_next_week_data = next_week_data_base # Dùng cấu trúc gốc nếu AI thất bại
+    except Exception as e:
+        logger.error(f"❌ Lỗi không xác định trong quá trình gọi AI: {e}")
+        modified_next_week_data = next_week_data_base 
+
+
+    # 4. CẬP NHẬT ROADMAP CUỐI CÙNG (Thay thế tuần cũ và chèn tuần mới đã chỉnh sửa)
+    
+    # 4a. Đánh dấu tuần N là COMPLETED
+    # current_roadmap_data['learning_phases'][phase_index]['weeks'][last_week_index]['status'] = 'COMPLETED'
+    def get_all_valid_lesson_ids(roadmap_data: Dict[str, Any]) -> set:
+        """Thu thập tất cả lesson_id đang tồn tại trong Roadmap."""
+        valid_ids = set()
+        for phase in roadmap_data.get('learning_phases', []):
+            for week in phase.get('weeks', []):
+                for section in ['grammar', 'vocabulary', 'speaking']:
+                    items = week.get(section, {}).get('items', [])
+                    for item in items:
+                        # Dùng .get() để tránh crash và lấy ID hợp lệ
+                        lesson_id = item.get('lesson_id')
+                        if lesson_id:
+                            valid_ids.add(lesson_id)
+        return valid_ids
+
+    def cleanup_user_progress(roadmap_data: Dict[str, Any], user_progress: Dict[str, Any]) -> Dict[str, Any]:
+        """Loại bỏ các Task đã bị xóa khỏi Roadmap khỏi user_progress."""
+        valid_ids = get_all_valid_lesson_ids(roadmap_data)
+        
+        # Chỉ giữ lại các mục trong user_progress có ID nằm trong valid_ids
+        cleaned_progress = {
+            lesson_id: progress_data 
+            for lesson_id, progress_data in user_progress.items() 
+            if lesson_id in valid_ids
+        }
+        
+        # Ghi log các Task bị xóa (tùy chọn)
+        removed_tasks = set(user_progress.keys()) - set(cleaned_progress.keys())
+        if removed_tasks:
+            logger.info(f"🗑️ Đã dọn dẹp {len(removed_tasks)} Task khỏi user_progress: {removed_tasks}")
+
+        return cleaned_progress
+    # 4b. Thay thế tuần N+1 gốc bằng cấu trúc đã được AI điều chỉnh
+    current_roadmap_data['learning_phases'][next_phase_index]['weeks'][next_week_index] = modified_next_week_data
+    def sync_new_tasks(roadmap_data, user_progress):
+        # Lấy dữ liệu tuần mới đã được AI chỉnh sửa
+        new_week = roadmap_data['learning_phases'][next_phase_index]['weeks'][next_week_index]
+        
+        for category in ['grammar', 'speaking', 'vocabulary']:
+            if category in new_week:
+                # Kiểm tra xem khóa 'items' có tồn tại không
+                items = new_week[category].get('items', []) 
+                
+                for item in items:
+                    # 🚨 SỬA LỖI: Dùng .get() để tránh KeyError nếu AI trả về cấu trúc thiếu
+                    lesson_id = item.get('lesson_id') 
+                    
+                    if lesson_id and lesson_id not in user_progress:
+                        # Thêm Task mới (bao gồm cả Task Review) vào user_progress với trạng thái PENDING
+                        user_progress[lesson_id] = {
+                            "type": category,
+                            "score": None,
+                            "status": "PENDING",
+                            "completed": False,
+                            "attempt_count": 0
+                        }
+        return user_progress
+
+    # Thực hiện đồng bộ hóa
+    current_roadmap_data['user_progress'] = cleanup_user_progress(
+        current_roadmap_data, 
+        current_roadmap_data['user_progress']
+            )
+    current_roadmap_data['user_progress'] = sync_new_tasks(current_roadmap_data, current_roadmap_data['user_progress'])
+    
+    # 5. LƯU ROADMAP ĐÃ CẬP NHẬT VÀO DB
+    def _save_roadmap_sync():
+        result = admin_supabase.table("roadmaps") \
+            .update({"data": current_roadmap_data}) \
+            .eq("user_id", user_id) \
+            .execute()
+        return result.data
+
+    try:
+        await anyio.to_thread.run_sync(_save_roadmap_sync)
+        logger.info("✅ Roadmap đã được lưu thành công với điều chỉnh từ AI.")
+        return True
+    except Exception as e:
+        logger.error(f"❌ Lỗi lưu Roadmap sau khi điều chỉnh AI: {e}")
+        return False

@@ -12,7 +12,7 @@ from dotenv import load_dotenv
 load_dotenv()
 
 GEMINI_API_KEY = os.environ.get("GOOGLE_API_KEY")
-GEMINI_MODEL = os.environ.get("GEMINI_CHAT_MODEL", "gemini-2.5-flash")
+GEMINI_MODEL = os.environ.get("GEMINI_CHAT_MODEL", "gemini-1.5-flash")
 
 try:
     client = genai.Client(api_key=GEMINI_API_KEY)
@@ -26,8 +26,8 @@ except:
 def validate_quiz_questions(questions: List[QuizQuestion]):
     allowed_types = {"grammar", "vocabulary", "speaking_prompt"}
 
-    if len(questions) != 23:
-        raise ValueError(f"Quiz phải có đúng 23 câu hỏi, nhận được {len(questions)}")
+    if len(questions) != 21:
+        raise ValueError(f"Quiz phải có đúng 21 câu hỏi, nhận được {len(questions)}")
 
     for idx, q in enumerate(questions, start=1):
 
@@ -90,28 +90,37 @@ async def generate_initial_quiz(prefs: PreferenceData) -> InitialQuizResponse:
     target_duration = prefs.target_duration
 
     prompt = f"""
-    Bạn là chuyên gia thiết kế bài kiểm tra chẩn đoán tiếng Anh giao tiếp.
+        SYSTEM ROLE: Senior English Assessment Developer.
+        TASK: Generate a diagnostic test JSON based on the learner profile below.
 
-    Hãy tạo một JSON object duy nhất chứa thuộc tính "questions".
+        LEARNER PROFILE:
+        - Goal: {comm_goal}
+        - Barrier: {barrier}
+        - Commitment: {commitment}/day
+        - Target: {target_duration}
 
-    ⚠️ CHỈ TRẢ RA JSON — KHÔNG TRẢ LỜI THÊM KÝ TỰ NÀO KHÁC.
+        STRICT TEST STRUCTURE (Total 21 Questions):
+        - ID 1-10: Grammar (Focus on practical structures for "{comm_goal}")
+        - ID 11-20: Vocabulary (Situational terms for "{comm_goal}" and "{barrier}")
+        - ID 21: Speaking Prompts (Open-ended situational scenarios) about "{comm_goal}"
 
-    Quiz gồm đúng 23 câu:
-    - 10 grammar
-    - 10 vocabulary
-    - 3 speaking_prompt
+        JSON SCHEMA REQUIREMENTS:
+        Return a single JSON object: {{"questions": [...]}}
+        Each item MUST have:
+        - "id": (int) strict sequence from 1 to 21.
+        - "question_text": (string) in English.
+        - "options": 
+            * For MCQ (ID 1-20): Array of exactly 4 strings. NO prefixes like "A)", "B)", etc.
+            * For Speaking (ID 21): Empty array [].
+        - "correct_answer_key":
+            * For MCQ: Exactly one character "A", "B", "C", or "D".
+            * For Speaking: Exactly "N/A".
+        - "question_type": "grammar", "vocabulary", or "speaking_prompt".
 
-    Mỗi item trong mảng questions phải có:
-    - id (int 1 → 23)
-    - question_text (string)
-    - options: 
-        • 4 string, không chứa A), B), C), D), nếu là grammar/vocabulary
-        • [] nếu là speaking_prompt
-    - correct_answer_key:
-        • A/B/C/D nếu là trắc nghiệm
-        • "N/A" nếu là speaking_prompt
-    - question_type: "grammar" | "vocabulary" | "speaking_prompt"
-    """
+        OUTPUT CONSTRAINT:
+        ⚠️ Return ONLY RAW JSON. No markdown blocks, no preamble, no conversational filler.
+        ⚠️ Ensure logically plausible distractors for MCQs.
+        """
 
     quiz_json_string = ""
 
@@ -119,7 +128,7 @@ async def generate_initial_quiz(prefs: PreferenceData) -> InitialQuizResponse:
         # gọi Gemini
         resp = await run_in_threadpool(
             client.models.generate_content,
-            model=GEMINI_MODEL,
+            model= "gemini-2.5-flash-preview-09-2025",
             contents=[prompt],
             config=g_types.GenerateContentConfig(
                 response_mime_type="application/json"

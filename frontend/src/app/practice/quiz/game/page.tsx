@@ -28,7 +28,7 @@ function QuizGamePage() {
   const deckIdString = searchParams.get("id"); 
   
   // 🚨 THÊM BIẾN LẤY lessonId TỪ URL PARAMS
-  const lessonId = searchParams.get("lessonId"); 
+  const lessonId = searchParams.get("lesson_id"); 
 
   const [questions, setQuestions] = useState<SmartQuestion[]>([]);
   const [currentIndex, setCurrentIndex] = useState(0);
