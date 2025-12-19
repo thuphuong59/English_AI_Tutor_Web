@@ -2,6 +2,7 @@ from fastapi import HTTPException
 from supabase.client import AuthApiError
 from fastapi_app.database import db_client
 from typing import Dict, Any
+from datetime import datetime, date, timezone
 
 USER_PROFILES_TABLE = "profiles"
 
@@ -47,12 +48,20 @@ def signup_service(user):
     except Exception as e:
         raise HTTPException(status_code=400, detail=str(e))
 
+from datetime import datetime, date, timezone
+
+def normalize_date(value):
+    if not value:
+        return None
+    if isinstance(value, date) and not isinstance(value, datetime):
+        return value
+    try:
+        # Parse chuỗi ISO từ Supabase (vd: 2025-12-19T...)
+        return datetime.fromisoformat(str(value).replace('Z', '+00:00')).date()
+    except:
+        return None
 
 async def login_service(user_data) -> Dict[str, Any]:
-    """
-    Xử lý đăng nhập, lấy token và truy vấn vai trò (role) từ Database.
-    Trả về Dict khớp với TokenResponse schema (có user_id và user_role).
-    """
     try:
         # 1. Đăng nhập Supabase Auth
         response = db_client.auth.sign_in_with_password({
@@ -64,23 +73,60 @@ async def login_service(user_data) -> Dict[str, Any]:
             raise HTTPException(status_code=401, detail="Invalid credentials")
 
         user_id = response.user.id
+        today = date.today()
         
-        # 2. Truy vấn Role từ Database (BƯỚC SỬA LỖI)
+        # 2. Truy vấn Profile để lấy Badge và Last Login
+        user_role = "user"
+        new_badge = 1
+        message = None
+        message_type = None   
         try:
-            profile_response = db_client.from_(USER_PROFILES_TABLE).select("role").eq("id", user_id).single().execute()
-            # Lấy role, mặc định là 'user' nếu không tìm thấy profile (Mặc dù nên tồn tại)
-            user_role = profile_response.data.get("role", "user") 
-        except Exception as db_err:
-             # Nếu lỗi DB, giả định là user thường (hoặc xử lý lỗi chặt hơn)
-             print(f"Warning: Could not fetch role for user {user_id}. Defaulting to 'user'. Error: {db_err}")
-             user_role = "user"
+            profile_res = db_client.table(USER_PROFILES_TABLE).select("*").eq("id", user_id).single().execute()
+            profile = profile_res.data
+            if profile:
+                user_role = profile.get("role", "user")
+                last_login_raw = profile.get("last_login_date")
+                current_badge = profile.get("badge", 0)
+                
+                last_login_date = normalize_date(last_login_raw)
+                
+                if last_login_date:
+                    delta = (today - last_login_date).days
+                    if delta == 1:
+                        # Đăng nhập liên tiếp -> Tăng badge
+                        new_badge = current_badge + 1
+                        message_type = "success"
+                        message = f"🎉 Congratulations! You’ve logged in consecutively and your badge has leveled up {new_badge}!"
+                    elif delta == 0:
+                        # Đăng nhập lại trong cùng ngày -> Giữ nguyên badge
+                        new_badge = current_badge                      
+                    else:
+                        # Nghỉ quá 1 ngày -> Reset về 1
+                        new_badge = 1
+                        message_type = "warning"
+                        message = f"You've lost your consecutive login streak. Your badge has been reset to 1."
+                else:
+                    # Lần đầu đăng nhập sau khi signup
+                    new_badge = 1
 
-        # 3. Trả về response HOÀN CHỈNH (Khớp với TokenResponse schema)
+                # 3. Cập nhật thông tin mới vào Database
+                db_client.table(USER_PROFILES_TABLE).update({
+                    "badge": new_badge,
+                    "last_login_date": today.isoformat(),
+                }).eq("id", user_id).execute()
+
+        except Exception as db_err:
+            print(f"Profile error: {db_err}")
+
+        # 4. Trả về response HOÀN CHỈNH
         return {
             "access_token": response.session.access_token,
             "token_type": "bearer",
             "user_id": user_id,      
-            "user_role": user_role    
+            "user_role": user_role,
+            "badge": new_badge,
+            "message": message,        # Thêm dòng này
+            "message_type": message_type# Trả thêm badge để frontend hiển thị lời chúc
         }
 
     except AuthApiError as e:

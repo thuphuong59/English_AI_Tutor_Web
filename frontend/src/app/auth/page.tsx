@@ -44,21 +44,24 @@ export default function AuthPage() {
       });
 
       const data = await res.json();
+      console.log("🔥 FULL LOGIN RESPONSE:", data);
       if (!res.ok) throw new Error(data.detail || "Something went wrong");
 
       if (isLogin) {
-        const { access_token, token_type, user_role } = data;
+        const { access_token, token_type, user_role,badge, message, message_type } = data;
 
         localStorage.setItem("access_token", access_token);
         localStorage.setItem("token_type", token_type);
         localStorage.setItem("adminToken", access_token);
-
-        toast.success("Login successful! Redirecting...");
-
+        if (message) {
+          console.log("Đã nhận message từ Backend:", message);
+          localStorage.setItem("loginMessage", message);
+          localStorage.setItem("loginMessageType", message_type || "success");
+          }
         let redirectPath = "/";
         if (user_role === "admin") redirectPath = "/admin/users";
 
-        setTimeout(() => (window.location.href = redirectPath), 1200);
+        setTimeout(() => (window.location.href = redirectPath), 300);
       } else {
         toast.success("Signup successful! Please login now.");
         setIsLogin(true);

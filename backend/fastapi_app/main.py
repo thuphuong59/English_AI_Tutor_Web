@@ -8,7 +8,7 @@ from fastapi_app.routers import (
     decks, public_decks, grammar_check, quizgame,admin
 )
 from fastapi_app.routers import audio
-from fastapi_app.routers import test_router, check_grammar_router, speech_router, assessment_router, quiz_grammar_router
+from fastapi_app.routers import test_router, check_grammar_router, pronunciation_router, assessment_router, quiz_grammar_router
 
 BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 ENV_PATH = os.path.join(BASE_DIR, ".env")
@@ -47,7 +47,7 @@ app.include_router(admin.router)
 # Routers từ phiên bản đến:
 app.include_router(test_router.router)
 app.include_router(check_grammar_router.router)
-app.include_router(speech_router.router)
+app.include_router(pronunciation_router.router)
 app.include_router(assessment_router.router)
 app.include_router(quiz_grammar_router.router, prefix="/api")
 
