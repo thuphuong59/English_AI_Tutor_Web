@@ -54,3 +54,90 @@ class MessageDetail(BaseModel):
 class SessionDetail(BaseModel):
     overview: SessionOverview
     messages: List[MessageDetail]
+
+# --- DECKS (Bộ từ vựng) ---
+class DeckBase(BaseModel):
+    name: str = Field(..., description="Tên bộ từ")
+    description: Optional[str] = None
+    level: Optional[str] = "beginner" 
+    image_url: Optional[str] = None
+
+class DeckCreate(DeckBase):
+    pass
+
+class DeckUpdate(BaseModel):
+    name: Optional[str] = None
+    description: Optional[str] = None
+    level: Optional[str] = None
+    image_url: Optional[str] = None
+    # is_public có thể không có trong DB, ta xử lý logic riêng
+
+class DeckResponse(DeckBase):
+    id: int  # <--- SỬA: Đổi từ str sang int
+    is_public: bool = Field(default=True) # <--- SỬA: Mặc định là True nếu DB không trả về
+    created_at: Optional[str] = None 
+    word_count: int = Field(default=0)
+
+    class Config:
+        from_attributes = True
+
+# --- VOCABULARY (Từ vựng) ---
+class VocabBase(BaseModel):
+    word: str
+    meaning: Optional[str] = None # Database có thể là definition
+    definition: Optional[str] = None # Thêm trường này để map với PublicWords
+    ipa: Optional[str] = None # pronunciation
+    pronunciation: Optional[str] = None # Thêm trường này
+    example_sentence: Optional[str] = None # context_sentence
+    context_sentence: Optional[str] = None # Thêm trường này
+    audio_url: Optional[str] = None
+    type: Optional[str] = None
+    
+class VocabCreate(VocabBase):
+    deck_id: int # <--- SỬA: Đổi từ str sang int
+
+class VocabUpdate(BaseModel):
+    word: Optional[str] = None
+    definition: Optional[str] = None
+    pronunciation: Optional[str] = None
+    context_sentence: Optional[str] = None
+    audio_url: Optional[str] = None
+    type: Optional[str] = None
+
+class VocabResponse(VocabBase):
+    id: int # <--- SỬA: Đổi từ str sang int
+    deck_id: int # <--- SỬA: Đổi từ str sang int
+    created_at: Optional[str] = None
+
+    class Config:
+        from_attributes = True
+
+# Schema cho 1 câu thoại
+class DialogueLine(BaseModel):
+    turn: int
+    speaker: str # 'ai' hoặc 'user'
+    line: str
+
+# Schema cho Kịch bản (Scenario)
+class ScenarioBase(BaseModel):
+    title: str
+    topic: str
+    level: str # Beginner, Intermediate, Advanced
+
+class ScenarioCreate(ScenarioBase):
+    dialogues: List[DialogueLine] # Khi tạo, gửi kèm luôn nội dung hội thoại
+
+class ScenarioUpdate(BaseModel):
+    title: Optional[str] = None
+    topic: Optional[str] = None
+    level: Optional[str] = None
+    # Để đơn giản, update dialogues ta sẽ làm logic riêng hoặc ghi đè toàn bộ
+
+class ScenarioResponse(ScenarioBase):
+    id: str
+    created_at: Optional[str] = None
+    # Trả về kèm dialogues để hiển thị chi tiết
+    dialogues: Optional[List[DialogueLine]] = None
+
+    class Config:
+        from_attributes = True
