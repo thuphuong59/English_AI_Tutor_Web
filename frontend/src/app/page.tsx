@@ -1,22 +1,127 @@
 "use client";
 import { useState, useEffect } from "react";
 import { MessageCircle, Mic, Brain, Sparkles, TrendingUp, Clock, ShieldCheck, Zap, Star, Activity, ArrowRight, Layers, Target, BarChart3 } from "lucide-react";
+import confetti from "canvas-confetti";
+import { motion, AnimatePresence } from "framer-motion";
 
 export default function HomePage() {
   // Animation state for the chat demo
   // 0: AI asks, 1: User answers, 2: AI Corrects + Scores
   const [activeMessage, setActiveMessage] = useState(0);
-
+  const [showNotification, setShowNotification] = useState(false);
+  const [notifMessage, setNotifMessage] = useState<string | null>(null);
+  const [notifType, setNotifType] = useState<string | null>(null);
   useEffect(() => {
-    const interval = setInterval(() => {
+    console.log("🔥 HomePage mounted");
+    let confettiInterval: any = null;
+    const timer = setTimeout(() => {
+      const msg = localStorage.getItem("loginMessage");
+      const type = localStorage.getItem("loginMessageType");
+      if (msg) {
+        setNotifMessage(msg);
+        setNotifType(type);
+        setShowNotification(true);
+
+        if (type === "success") {
+          const duration = 3000;
+          const animationEnd = Date.now() + duration;
+          const defaults = { startVelocity: 30, spread: 360, ticks: 60, zIndex: 0 };
+
+          const randomInRange = (min: number, max: number) =>
+            Math.random() * (max - min) + min;
+
+          confettiInterval = setInterval(() => {
+            const timeLeft = animationEnd - Date.now();
+            if (timeLeft <= 0) {
+              clearInterval(confettiInterval);
+              return;
+            }
+
+            const particleCount = 50 * (timeLeft / duration);
+            confetti({
+              ...defaults,
+              particleCount,
+              origin: { x: randomInRange(0.1, 0.3), y: Math.random() - 0.2 },
+            });
+            confetti({
+              ...defaults,
+              particleCount,
+              origin: { x: randomInRange(0.7, 0.9), y: Math.random() - 0.2 },
+            });
+          }, 250);
+        }
+
+        localStorage.removeItem("loginMessage");
+        localStorage.removeItem("loginMessageType");
+      }
+    }, 500);
+
+    const chatInterval = setInterval(() => {
       setActiveMessage((prev) => (prev + 1) % 3);
-    }, 4000); // Tăng thời gian lên chút để người dùng kịp đọc điểm số
-    return () => clearInterval(interval);
+    }, 4000);
+
+    return () => {
+      if (confettiInterval) clearInterval(confettiInterval);
+      clearInterval(chatInterval);
+    };
   }, []);
 
   return (
     <main className="flex min-h-screen flex-col bg-gradient-to-br from-[#F9F4EF] via-[#F4FFFB] to-[#E6ECFF] overflow-x-hidden">
-      
+      <AnimatePresence>
+        {showNotification && (
+          <motion.div 
+            initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
+            className="fixed inset-0 z-[9999] flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-md"
+          >
+            <motion.div 
+              initial={{ scale: 0.8, y: 50, rotate: -2 }} 
+              animate={{ scale: 1, y: 0, rotate: 0 }}
+              className="relative bg-white/90 backdrop-blur-xl rounded-[3rem] shadow-[0_32px_64px_-15px_rgba(0,0,0,0.3)] overflow-hidden max-w-sm w-full border border-white"
+            >
+              {/* Họa tiết trang trí nền */}
+              <div className={`absolute -top-24 -left-24 w-64 h-64 rounded-full opacity-20 blur-3xl ${notifType === 'success' ? 'bg-emerald-400' : 'bg-rose-400'}`}></div>
+              <div className={`absolute -bottom-24 -right-24 w-64 h-64 rounded-full opacity-20 blur-3xl ${notifType === 'success' ? 'bg-blue-400' : 'bg-amber-400'}`}></div>
+              
+              <div className="p-10 text-center relative z-10">
+                {/* Badge Icon Container */}
+                <div className="relative mb-8 flex justify-center">
+                  <div className={`w-28 h-28 rounded-[2.5rem] rotate-12 flex items-center justify-center shadow-2xl transition-transform hover:rotate-0 duration-500 ${notifType === 'success' ? 'bg-gradient-to-tr from-emerald-500 to-teal-400' : 'bg-gradient-to-tr from-rose-500 to-orange-400'}`}>
+                      <div className="-rotate-12 transition-transform group-hover:rotate-0">
+                        {notifType === 'success' ? (
+                          <Sparkles className="w-12 h-12 text-white drop-shadow-lg animate-pulse" />
+                        ) : (
+                          <Activity className="w-12 h-12 text-white drop-shadow-lg" />
+                        )}
+                      </div>
+                  </div>
+                  {/* Hiệu ứng tia sáng phía sau icon */}
+                  <div className={`absolute inset-0 blur-2xl opacity-40 -z-10 ${notifType === 'success' ? 'bg-emerald-400' : 'bg-rose-400'}`}></div>
+                </div>
+                
+                <h3 className="text-4xl font-black text-slate-900 mb-4 tracking-tighter italic">
+                  {notifType === 'success' ? "AMAZING!" : "OH NO..."}
+                </h3>
+                
+                <p className="text-slate-600 font-semibold leading-relaxed mb-10 px-2 text-lg">
+                  {notifMessage}
+                </p>
+                
+                <button 
+                  onClick={() => setShowNotification(false)}
+                  className={`w-full py-5 rounded-[2rem] font-black text-lg uppercase tracking-widest text-white shadow-2xl transition-all hover:scale-105 active:scale-95 transform ${
+                    notifType === 'success' 
+                      ? 'bg-emerald-500 shadow-emerald-500/40 hover:bg-emerald-600' 
+                      : 'bg-rose-500 shadow-rose-500/40 hover:bg-rose-600'
+                  }`}
+                >
+                  {notifType === 'success' ? "Let's GO!" : "Continue Learning"}
+                </button>
+              </div>
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
       {/* --- HERO SECTION --- */}
       <section className="relative flex flex-col items-center justify-center text-center px-6 py-20 lg:py-32 overflow-hidden">
         {/* Animated Background Elements */}

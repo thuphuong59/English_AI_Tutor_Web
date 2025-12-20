@@ -19,4 +19,8 @@ class TokenResponse(BaseModel):
     access_token: str
     token_type: str
     user_id: str
-    user_role: str # Thêm trường role để Frontend có thể chuyển hướng
+    user_role: str 
+    badge: Optional[int] = None
+    message: Optional[str] = None
+    message_type: Optional[str] = None
+    # Thêm trường role để Frontend có thể chuyển hướng

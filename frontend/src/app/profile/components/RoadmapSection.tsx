@@ -124,9 +124,10 @@ export function RoadmapSection({ userLevel }: RoadmapSectionProps) {
     const [isGenerating, setIsGenerating] = useState(false);
     const [openStageIndex, setOpenStageIndex] = useState<number | null>(0);
     const [openWeekIndex, setOpenWeekIndex] = useState<{ [key: number]: number | null }>({ 0: 0 });
-
+    const [lastProcessedWeek, setLastProcessedWeek] = useState<number | null>(null);
     
     // 🚨 HÀM TỔNG HỢP & CẢI THIỆN LỘ TRÌNH (LLM Call)
+    
     const reassessRoadmap = useCallback(async (currentProgress: any, completedWeek: any) => {
         const userId = localStorage.getItem("authenticatedUserId");
         const token = localStorage.getItem("access_token");
@@ -221,7 +222,7 @@ export function RoadmapSection({ userLevel }: RoadmapSectionProps) {
                         const nextWeekExists = !!stage.weeks[currentWeekIndex + 1];
 
                         // Nếu tuần này hoàn thành VÀ KHÔNG có tuần tiếp theo (cần AI tạo tuần mới)
-                        if (!nextWeekExists) {
+                        if (!nextWeekExists && lastProcessedWeek !== week.week_number) {
                             weekToReassess = week;
                             break; 
                         }
@@ -230,12 +231,13 @@ export function RoadmapSection({ userLevel }: RoadmapSectionProps) {
                         break; 
                     }
                 }
-                if (weekToReassess) break; 
+                if (weekToReassess) break;
             }
 
             // Kích hoạt Reassessment
             if (weekToReassess) {
                  console.log(`[Reassessment Triggered] Week ${weekToReassess.week_number} completed. Reassessing.`);
+                 setLastProcessedWeek(weekToReassess.week_number); 
                  reassessRoadmap(roadmap.userProgress, weekToReassess);
             }
         }
@@ -351,6 +353,19 @@ export function RoadmapSection({ userLevel }: RoadmapSectionProps) {
     if (isLoading) return <div className="p-6">Đang tải lộ trình...</div>;
     if (!roadmap?.roadmap || roadmap.roadmap.length === 0) return null;
     let hasFoundFirstIncompleteWeek = false; 
+    const getActivePos = () => {
+        if (!roadmap?.roadmap) return { s: 0, w: 0 };
+        for (let s = 0; s < roadmap.roadmap.length; s++) {
+            for (let w = 0; w < roadmap.roadmap[s].weeks.length; w++) {
+                if (!checkAllTasksCompleted(roadmap.roadmap[s].weeks[w], roadmap.userProgress)) {
+                    return { s, w };
+                }
+            }
+        }
+        return { s: 99, w: 99 };
+    };
+    const activePos = getActivePos();
+
 
     return (
         <div className="relative w-full space-y-8">
@@ -384,16 +399,17 @@ export function RoadmapSection({ userLevel }: RoadmapSectionProps) {
                                 {stage.weeks.map((week: any, wIdx: number) => {
                                     
                                     const isCompleted = checkAllTasksCompleted(week, roadmap.userProgress);
-                                    let isLocked = false;
+                                    // let isLocked = false;
+                                    const isLocked = !isCompleted && (sIdx > activePos.s || (sIdx === activePos.s && wIdx > activePos.w));
                                     
                                     // 🚨 LOGIC KHÓA TUẦN
-                                    if (!isCompleted && !hasFoundFirstIncompleteWeek) {
-                                        // Đây là tuần đầu tiên chưa hoàn thành (Tuần đang học). Cho phép truy cập.
-                                        hasFoundFirstIncompleteWeek = true;
-                                    } else if (hasFoundFirstIncompleteWeek) {
-                                        // Đã tìm thấy tuần đang học, khóa tuần này và tất cả các tuần sau đó.
-                                        isLocked = true;
-                                    }
+                                    // if (!isCompleted && !hasFoundFirstIncompleteWeek) {
+                                    //     // Đây là tuần đầu tiên chưa hoàn thành (Tuần đang học). Cho phép truy cập.
+                                    //     hasFoundFirstIncompleteWeek = true;
+                                    // } else if (hasFoundFirstIncompleteWeek) {
+                                    //     // Đã tìm thấy tuần đang học, khóa tuần này và tất cả các tuần sau đó.
+                                    //     isLocked = true;
+                                    // }
 
                                     return (
                                         <div key={wIdx} className="bg-white rounded-2xl border border-slate-50 shadow-sm">
@@ -430,7 +446,7 @@ export function RoadmapSection({ userLevel }: RoadmapSectionProps) {
                                                     <TaskGroup title="Speaking skills" tasks={week.speaking.items} userProgress={roadmap.userProgress} onStart={handleStartActivity} taskType='speaking' isWeekDisabled={isLocked} />
                                                     
                                                     <div className="p-3 bg-blue-50/50 border border-blue-100 rounded-xl text-blue-700 text-[10px] font-semibold">
-                                                        🎯 Mục tiêu: {week.expected_outcome}
+                                                        Goal: {week.expected_outcome}
                                                     </div>
                                                 </div>
                                             )}

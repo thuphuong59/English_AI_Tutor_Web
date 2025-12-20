@@ -10,29 +10,17 @@ You MUST return exactly one valid JSON, with no additional content outside the J
 
 Learner information:
     Quiz result: {mcq_analysis}
-
     Key weaknesses: {", ".join(weak_points_list) if weak_points_list else "Not clearly identified"}
-
     Speaking overall evaluation: "{speaking_overall}"
-
     Daily learning commitment: {prefs_dict['daily_commitment']}
-
     Communication goal: {prefs_dict['communication_goal']}
-
     Target time to reach goal: {prefs_dict['target_duration']}
-
     Strict requirements:
-
     Analyze the MCQ result ({mcq_analysis}), ({speaking_overall}) and response latency to self-evaluate the learner’s current level (e.g., A1, A2, B1...).
-
     Write an overall summary (150–250 words) in Vietnamese for the "user_summary" key.
-
     Create a detailed learning roadmap tailored to the learner’s level and weaknesses, divided into 2–4 phases.
-
     Each phase MUST contain a "weeks" array.
-
     In each week, the "grammar", "vocabulary", and "speaking" keys MUST be complex objects containing a "title", "lesson_id", and a detailed "items" array (at least 2 items).
-
     RETURN ONLY ONE JSON FOLLOWING EXACTLY THIS STRUCTURE:
 
     {{
@@ -133,20 +121,12 @@ def build_roadmap_adjustment_prompt(
 ):
     return f"""
     You are a Personalized Learning Roadmap Adjustment System. Your task is to thoroughly analyze the learning results from the previous week in order to adjust the learning content for the following week.
-
-
     1. PREVIOUS WEEK ASSESSMENT DATA (Week {last_week_number}):
     {weekly_summary_record}
-
-
     2. NEXT WEEK ROADMAP STRUCTURE (Week {next_week_data_base.get('week_number')} – ORIGINAL JSON FORMAT):
     {next_week_json}
-
-
     YOUR ADJUSTMENT RULES:
     - If there are any Tasks in the 'review_tasks' list of Grammar, Vocabulary, or Speaking, **insert** these Tasks at the **beginning** of the 'items' list of the corresponding topic in the next week’s structure.
-
-
     - FOR NEW REVIEW TASKS:
     - Must include the key **"type": "review"**.
     - The "title" key must have the prefix **"REVIEW: "**.

@@ -24,7 +24,7 @@ try:
     from .test_service import client, GEMINI_MODEL 
 except ImportError:
     client = None
-    GEMINI_MODEL = "gemini-2.0-flash"
+    # GEMINI_MODEL = "gemini-2.0-flash"
 
 
 # --- HÀM 1: STT VÀ PHÂN TÍCH TRANSCRIPT ---
@@ -279,7 +279,7 @@ async def analyze_and_generate_roadmap(
     try:
         roadmap_response = await run_in_threadpool(
             client.models.generate_content,
-            model="gemini-2.5-flash",
+            model="gemini-2.5-flash-preview-09-2025",
             contents=[roadmap_prompt],
             config=g_types.GenerateContentConfig(response_mime_type="application/json")
         )
