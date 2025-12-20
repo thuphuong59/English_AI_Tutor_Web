@@ -1,5 +1,5 @@
 import { useRef, useLayoutEffect } from "react";
-import { Volume2, Lightbulb, FileText, Star, Sparkles, Mic } from "lucide-react";
+import { Volume2, Lightbulb, FileText, Star, Sparkles, Mic, User } from "lucide-react";
 import { DisplayMessage } from "../types";
 
 interface ChatAreaProps {
@@ -9,12 +9,14 @@ interface ChatAreaProps {
 }
 
 const renderIconForType = (
-  type?: "feedback" | "summary" | "speech" | "greeting" | "reply" | "audio_input"
+  type?: "feedback" | "summary" | "speech" | "greeting" | "reply" | "audio_input" | "user_input"
 ) => {
   if (type === "feedback") return <Lightbulb className="w-5 h-5 text-[#0067C5] mt-1" />;
   if (type === "summary") return <FileText className="w-5 h-5 text-[#0067C5] mt-1" />;
   if (type === "speech") return <Star className="w-5 h-5 text-[#0067C5] mt-1" />;
   if (type === "audio_input") return <Mic className="w-5 h-5 text-white mt-1" />;
+  // You can add a specific icon for user_input if you want, though user messages usually don't use this function in your layout
+  if (type === "user_input") return <User className="w-5 h-5 text-white mt-1" />; 
   
   return (
     <div className="w-8 h-8 rounded-full bg-[#0067C5]/10 flex items-center justify-center text-sm font-bold text-[#0067C5] shadow-sm mt-0.5">

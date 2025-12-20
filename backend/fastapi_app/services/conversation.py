@@ -19,7 +19,7 @@ if not GEMINI_API_KEY:
     raise ValueError("GOOGLE_API_KEY not found.")
 genai.configure(api_key=GEMINI_API_KEY)
 
-MODEL_NAME = "gemini-2.5-flash-preview-09-2025"
+MODEL_NAME = "gemini-2.5-flash"
 try:
     chat_model = genai.GenerativeModel(MODEL_NAME)
     summary_model = genai.GenerativeModel(MODEL_NAME)
