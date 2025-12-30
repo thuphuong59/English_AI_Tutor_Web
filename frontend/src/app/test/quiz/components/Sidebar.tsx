@@ -1,8 +1,5 @@
-// frontend/src/app/test/quiz/components/Sidebar.tsx
-
 import React from "react";
 
-// 🚨 BƯỚC 1: ĐỊNH NGHĨA KIỂU DỮ LIỆU MỞ RỘNG (Phải khớp với QuizPage) 🚨
 interface AudioData {
     audioBlob: Blob;
     latency: number;
@@ -13,7 +10,6 @@ type AnswerValue = string | AudioData | null;
 interface SidebarProps {
     shuffledQuestions: any[];
     currentQuestion: number;
-    // 🚨 BƯỚC 2: CẬP NHẬT KIỂU selectedOptions 🚨
     selectedOptions: Record<number, AnswerValue>; 
     setCurrentQuestion: (q: number) => void;
     minutes: number;
@@ -31,15 +27,14 @@ export default function Sidebar({
     onSubmit,
 }: SidebarProps) {
     return (
-        <aside className="w-1/4 bg-white shadow-md border-2 border-teal-500 p-6 rounded-xl flex flex-col">
-            {/* Countdown và Submit */}
+        <aside className="w-1/4 bg-white shadow-md border-2 border-blue-500 p-6 rounded-xl flex flex-col">
             <div className="flex justify-between items-center mb-4">
                 <span className="text-red-600 font-extrabold text-xl">
                     {minutes}:{seconds.toString().padStart(2, "0")}
                 </span>
                 <button
                     onClick={onSubmit}
-                    className="bg-teal-600 text-white px-4 py-2 rounded hover:bg-teal-700 font-bold text-lg"
+                    className="bg-blue-600 text-white px-4 py-2 rounded hover:bg-blue-700 font-bold text-lg"
                 >
                     Submit
                 </button>
@@ -47,14 +42,11 @@ export default function Sidebar({
 
             <hr className="my-4 border-gray-300" />
 
-            <h2 className="text-lg font-bold text-teal-600 mb-4">List of questions</h2>
+            <h2 className="text-lg font-bold text-blue-600 mb-4">List of questions</h2>
             <div className="grid grid-cols-5 gap-3">
                 {shuffledQuestions.map((q, index) => {
-                    // 🚨 ĐIỀU CHỈNH LOGIC KIỂM TRA ĐÃ TRẢ LỜI 🚨
-                    // Kiểm tra nếu câu trả lời không phải null HOẶC nếu đó là object AudioData
                     const answer = selectedOptions[q.id];
                     const isAnswered = answer !== null && answer !== undefined;
-
                     const isCurrent = currentQuestion === index + 1;
 
                     return (
@@ -64,10 +56,10 @@ export default function Sidebar({
                             className={`w-12 h-12 flex items-center justify-center rounded-full border-2 transition
                                 ${
                                     isCurrent
-                                        ? "border-teal-600 bg-teal-50 text-teal-700 font-bold"
+                                        ? "border-blue-600 bg-blue-50 text-blue-700 font-bold"
                                         : isAnswered
-                                        ? "border-teal-500 bg-teal-500 text-white font-semibold"
-                                        : "border-gray-300 bg-white text-gray-700 hover:border-teal-500 hover:text-teal-600"
+                                        ? "border-blue-500 bg-blue-500 text-white font-semibold"
+                                        : "border-gray-300 bg-white text-gray-700 hover:border-blue-500 hover:text-blue-600"
                                 }`}
                         >
                             {index + 1}

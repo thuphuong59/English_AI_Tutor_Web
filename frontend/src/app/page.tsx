@@ -133,10 +133,6 @@ export default function HomePage() {
 
         {/* Content */}
         <div className="relative z-10 max-w-5xl mx-auto">
-          <div className="inline-flex items-center px-4 py-2 bg-white/80 backdrop-blur-sm rounded-full border border-emerald-200 mb-8 shadow-lg animate-fade-in-up">
-            <Sparkles className="w-5 h-5 text-emerald-500 mr-2" />
-            <span className="text-emerald-700 font-medium">Next-Gen AI Personalization</span>
-          </div>
 
           <h1 className="text-6xl md:text-7xl lg:text-8xl font-black mb-6 tracking-tight">
             <span className="bg-gradient-to-r from-[#98F5E1] via-[#6B63FF] to-[#B9B4FF] bg-clip-text text-transparent">
@@ -510,7 +506,7 @@ export default function HomePage() {
              <div className="flex items-center gap-2 mt-4 md:mt-0">
                <span>Made with</span>
                <span className="text-red-500 animate-pulse">❤️</span>
-               <span>by AI</span>
+               <span>by AI English Tutor</span>
              </div>
           </div>
         </div>

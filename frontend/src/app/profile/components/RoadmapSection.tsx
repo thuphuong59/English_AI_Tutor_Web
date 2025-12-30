@@ -434,7 +434,7 @@ export function RoadmapSection({ userLevel }: RoadmapSectionProps) {
                                                     <span className={`font-bold text-xs text-slate-700`}>Week {week.week_number}</span> 
                                                     {isLocked && <span className="text-red-500 text-[8px] font-black bg-red-50 px-2 py-0.5 rounded-md">LOCKED</span>}
                                                 </div>
-                                                <span className="text-slate-300 text-[10px] uppercase font-bold">{openWeekIndex[sIdx] === wIdx ? "Đóng" : "Mở"}</span>
+                                                <span className="text-slate-300 text-[10px] uppercase font-bold">{openWeekIndex[sIdx] === wIdx ? "Close" : "Open"}</span>
                                             </div>
 
                                             {/* Body Week: Task Groups */}

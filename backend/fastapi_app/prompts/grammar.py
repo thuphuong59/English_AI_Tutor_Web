@@ -17,7 +17,7 @@ For each question, provide:
       {{ 
         "question": "string", 
         "options": ["string_A_value", "string_B_value", "string_C_value", "string_D_value"], 
-        "answer": "A"  // 🚨 THAY ĐỔI: Sử dụng "correct_key" và yêu cầu là KÝ TỰ (A, B, C, D)
+        "answer": "A"  
       }}
     ]
     """

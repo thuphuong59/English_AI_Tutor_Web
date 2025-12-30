@@ -69,13 +69,13 @@ const AdminLayout: React.FC<AdminLayoutProps> = ({ children }) => {
                     active: pathname?.startsWith('/admin/scenarios'),
                     disabled: false 
                 },
-                { 
-                    name: 'Prompt Engineering', 
-                    href: '/admin/prompts', 
-                    icon: FiCpu, 
-                    active: false,
-                    disabled: true 
-                },
+                // { 
+                //     name: 'Prompt Engineering', 
+                //     href: '/admin/prompts', 
+                //     icon: FiCpu, 
+                //     active: false,
+                //     disabled: true 
+                // },
             ]
         },
         { 
