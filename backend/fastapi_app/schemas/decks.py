@@ -50,6 +50,7 @@ class PublicDeck(BaseModel):
     name: str
     level: Optional[str] = None
     description: Optional[str] = None
+    image_url: Optional[str] = None
 
     class Config:
         from_attributes = True

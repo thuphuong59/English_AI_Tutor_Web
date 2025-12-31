@@ -50,7 +50,6 @@ export default function QuestionContent({
         setAudioUrl(null);
         setLatencyTime(null);
         
-        // Analyze currentAnswer to restore state if it exists
         if (currentAnswer && typeof currentAnswer === 'object' && 'audioBlob' in currentAnswer) {
             setLatencyTime(currentAnswer.latency);
             setRecordingState('finished');
@@ -66,17 +65,17 @@ export default function QuestionContent({
     
     if (!currentQ) {
         return (
-            <div className="w-full max-w-2xl bg-white rounded-xl p-8 shadow">
-                <p className="text-gray-500">Loading question...</p>
+            <div className="w-full max-w-2xl bg-white rounded-2xl p-8 shadow-sm border border-blue-100 flex justify-center items-center">
+                <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600"></div>
+                <p className="ml-3 text-blue-600 font-medium">Loading question...</p>
             </div>
         );
     }
     
     // --- RECORDING LOGIC ---
-    
     const startRecording = async () => {
         if (!navigator.mediaDevices || !window.MediaRecorder) {
-            toast.error("Your browser does not support audio recording.");
+            toast.error("Trình duyệt không hỗ trợ ghi âm.");
             return;
         }
 
@@ -84,13 +83,10 @@ export default function QuestionContent({
 
         try {
             const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
-            
             const actualLatencyMs = Date.now() - clickTimeRef.current;
-            
             const recorder = new MediaRecorder(stream);
             mediaRecorderRef.current = recorder;
             audioChunksRef.current = [];
-            
             const recordingStartTime = Date.now(); 
             
             recorder.ondataavailable = (event) => {
@@ -105,7 +101,6 @@ export default function QuestionContent({
                 setAudioUrl(blobUrl);
                 setRecordingState('finished');
                 setLatencyTime(actualLatencyMs);
-
                 stream.getTracks().forEach(track => track.stop());
 
                 setSelectedOptions((prev) => ({
@@ -121,17 +116,15 @@ export default function QuestionContent({
             recorder.start();
             setRecordingState('recording');
             
-            // Auto stop after 30s
             setTimeout(() => {
                 if (recorder.state === 'recording') {
                     stopRecording();
-                    toast('Time limit reached. Recording stopped.');
+                    toast('Đã hết thời gian ghi âm (30s).');
                 }
             }, 30000); 
 
         } catch (err) {
-            console.error("Microphone access error:", err);
-            toast.error("Please allow microphone access to proceed.");
+            toast.error("Vui lòng cấp quyền truy cập micro.");
             setRecordingState('idle');
         }
     };
@@ -142,14 +135,14 @@ export default function QuestionContent({
         }
     };
     
-    // --- RENDER ---
-
     return (
-        <div className="w-full max-w-2xl bg-white rounded-xl p-8 shadow-lg border border-gray-100">
+        <div className="w-full max-w-2xl bg-white rounded-2xl p-8 shadow-xl border border-blue-50">
             
             {/* QUESTION TEXT */}
-            <h2 className="text-xl font-bold mb-6 text-gray-900">
-                <span className="text-blue-600 mr-2">{currentQuestion}.</span>
+            <h2 className="text-xl font-bold mb-8 text-slate-800 leading-relaxed">
+                <span className="inline-flex items-center justify-center w-8 h-8 rounded-lg bg-blue-600 text-white text-sm mr-3 shadow-md">
+                    {currentQuestion}
+                </span>
                 {currentQ?.question_text}
             </h2>
             
@@ -163,10 +156,10 @@ export default function QuestionContent({
                         return (
                             <label 
                                 key={optionKey} 
-                                className={`flex items-center gap-4 p-4 rounded-xl cursor-pointer transition-all border-2
+                                className={`group flex items-center gap-4 p-5 rounded-2xl cursor-pointer transition-all border-2
                                     ${isChecked 
-                                        ? 'border-blue-600 bg-blue-50 shadow-md' 
-                                        : 'border-gray-200 hover:border-blue-400 hover:bg-gray-50'}
+                                        ? 'border-blue-600 bg-blue-50/50 shadow-sm' 
+                                        : 'border-slate-100 hover:border-blue-300 hover:bg-blue-50/30'}
                                 `}
                                 onClick={() =>
                                     setSelectedOptions((prev) => ({
@@ -175,10 +168,10 @@ export default function QuestionContent({
                                     }))
                                 }
                             >
-                                <div className={`w-6 h-6 rounded-full border-2 flex items-center justify-center shrink-0 transition-colors
-                                    ${isChecked ? 'border-blue-600 bg-blue-600' : 'border-gray-300'}
+                                <div className={`w-6 h-6 rounded-full border-2 flex items-center justify-center shrink-0 transition-all
+                                    ${isChecked ? 'border-blue-600 bg-blue-600' : 'border-slate-300 group-hover:border-blue-400'}
                                 `}>
-                                    {isChecked && <div className="w-2.5 h-2.5 bg-white rounded-full" />}
+                                    {isChecked && <div className="w-2 h-2 bg-white rounded-full shadow-sm" />}
                                 </div>
                                 
                                 <input
@@ -187,10 +180,10 @@ export default function QuestionContent({
                                     value={optionKey}
                                     checked={isChecked}
                                     onChange={() => {}}
-                                    className="hidden" // Hide default radio
+                                    className="hidden"
                                 />
-                                <span className={`font-medium text-lg ${isChecked ? 'text-blue-900' : 'text-gray-700'}`}>
-                                    {optionKey}. {opt}
+                                <span className={`font-semibold text-lg ${isChecked ? 'text-blue-700' : 'text-slate-600'}`}>
+                                    <span className="opacity-50 mr-2">{optionKey}.</span> {opt}
                                 </span>
                             </label>
                         );
@@ -198,22 +191,29 @@ export default function QuestionContent({
                 </div>
             ) : (
                 // --- SPEAKING PROMPT ---
-                <div className="p-6 bg-blue-50 border-l-4 border-blue-600 rounded-r-xl">
-                    <p className="font-bold text-lg text-blue-900 mb-2">
+                <div className="bg-gradient-to-br from-blue-50 to-indigo-50 border border-blue-100 rounded-2xl p-8 overflow-hidden relative">
+                    {/* Decorative element */}
+                    <div className="absolute top-0 right-0 -mt-4 -mr-4 w-24 h-24 bg-blue-200/20 rounded-full blur-2xl"></div>
+
+                    <p className="font-bold text-blue-900 mb-2 flex items-center gap-2">
+                        <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 11a7 7 0 01-7 7m0 0a7 7 0 01-7-7m7 7v4m0 0H8m4 0h4m-4-8a3 3 0 01-3-3V5a3 3 0 116 0v6a3 3 0 01-3 3z" />
+                        </svg>
                         Speaking Instructions
                     </p>
-                    <p className="text-blue-800 mb-6 opacity-90">
-                        Please answer the question or situation above using your voice. (Limit: 30 seconds).
+                    <p className="text-blue-700/80 mb-8 text-sm leading-relaxed">
+                            Please answer the question using your voice. The system will record for up to 30 seconds.
                     </p>
                     
-                    <div className="h-24 flex flex-col items-center justify-center rounded-lg bg-white/50 border border-blue-100 p-4">
+                    <div className="min-h-[120px] flex flex-col items-center justify-center rounded-2xl bg-white/60 backdrop-blur-sm border border-blue-200/50 p-6 shadow-inner">
                         
                         {/* 1. IDLE */}
                         {recordingState === 'idle' && (
                             <button
                                 onClick={startRecording}
-                                className="bg-blue-600 text-white px-8 py-3 rounded-full font-bold shadow-lg hover:bg-blue-700 transition active:scale-95 disabled:bg-gray-400 disabled:cursor-not-allowed"
+                                className="group flex items-center gap-3 bg-blue-600 text-white px-10 py-4 rounded-full font-bold shadow-lg shadow-blue-200 hover:bg-blue-700 hover:-translate-y-0.5 transition-all active:scale-95"
                             >
+                                <div className="w-3 h-3 bg-white rounded-full group-hover:animate-pulse"></div>
                                 Start Recording
                             </button>
                         )}
@@ -221,33 +221,48 @@ export default function QuestionContent({
                         {/* 2. RECORDING */}
                         {recordingState === 'recording' && (
                             <div className="flex flex-col items-center w-full">
-                                <div className="flex items-center space-x-3 mb-3">
-                                    <span className="relative flex h-3 w-3">
+                                <div className="flex items-center space-x-3 mb-4">
+                                    <span className="relative flex h-4 w-4">
                                       <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-red-400 opacity-75"></span>
-                                      <span className="relative inline-flex rounded-full h-3 w-3 bg-red-500"></span>
+                                      <span className="relative inline-flex rounded-full h-4 w-4 bg-red-500"></span>
                                     </span>
-                                    <p className="text-red-600 font-bold tracking-wider text-sm">RECORDING...</p>
+                                    <p className="text-red-600 font-black tracking-widest text-sm">LIVE RECORDING</p>
                                 </div>
                                 <button
                                     onClick={stopRecording}
-                                    className="text-gray-500 hover:text-red-600 text-sm font-semibold underline decoration-2 underline-offset-4 transition-colors"
+                                    className="flex items-center gap-2 bg-white text-blue-600 border-2 border-blue-600 px-8 py-2 rounded-full font-bold hover:bg-blue-50 transition-colors"
                                 >
-                                    Stop Recording
+                                    <div className="w-2 h-2 bg-blue-600"></div>
+                                    Stop Now
                                 </button>
                             </div>
                         )}
 
                         {/* 3. FINISHED */}
                         {recordingState === 'finished' && audioUrl && (
-                            <div className="w-full flex flex-col items-center">
-                                <p className="text-green-600 font-bold mb-2 text-sm">Recording Saved</p>
-                                <audio controls src={audioUrl} className="w-full max-w-xs h-8 mb-1" /> 
-                                <p className="text-xs text-gray-400 mt-1 font-mono">
-                                    Latency: {latencyTime ? (latencyTime / 1000).toFixed(3) + 's' : 'N/A'}
+                            <div className="w-full flex flex-col items-center animate-in fade-in zoom-in duration-300">
+                                <p className="text-blue-600 font-bold mb-4 flex items-center gap-2">
+                                    <svg className="w-4 h-4" fill="currentColor" viewBox="0 0 20 20">
+                                        <path d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" />
+                                    </svg>
+                                    Recording Captured
                                 </p>
+                                <div className="bg-blue-100/50 p-2 rounded-full w-full max-w-xs mb-3">
+                                    <audio controls src={audioUrl} className="w-full h-8" /> 
+                                </div>
+                                <div className="flex gap-4">
+                                    <button 
+                                        onClick={startRecording}
+                                        className="text-xs font-bold text-blue-500 hover:text-blue-700 underline"
+                                    >
+                                        Re-record
+                                    </button>
+                                    <span className="text-xs text-slate-400 font-mono">
+                                        Latency: {latencyTime ? (latencyTime / 1000).toFixed(3) + 's' : 'N/A'}
+                                    </span>
+                                </div>
                             </div>
                         )}
-                        
                     </div>
                 </div>
             )}

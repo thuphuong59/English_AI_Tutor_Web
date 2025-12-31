@@ -58,6 +58,7 @@ export interface PublicDeck {
   level: string | null;
   description: string | null;
   created_at: string; 
+  image_url?: string | null; 
 }
 
 export interface PublicWord {
