@@ -5,7 +5,7 @@ import React, { useState, useEffect, useCallback } from "react";
 import toast from "react-hot-toast";
 import { useRouter } from "next/navigation";
 import { Loader2, Lock } from "lucide-react";
-
+import { motion } from "framer-motion";
 // --- Khai báo Prop Interface ---
 interface RoadmapSectionProps {
     userLevel: string; // Level thực tế của người dùng
@@ -17,7 +17,10 @@ interface TaskGroupProps {
     // Định nghĩa rõ onStart chấp nhận 4 đối số và trả về Promise<void>
     onStart: (lessonId: string, topicTitle: string, taskType: string, isTitleClick: boolean) => Promise<void>; 
     taskType: string;
-    isWeekDisabled: boolean; // <--- THÊM DÒNG NÀY
+    isWeekDisabled: boolean;
+    missingDeckId?: string | null;
+    setMissingDeckId?: (id: string | null) => void;
+     // <--- THÊM DÒNG NÀY
 }
 
 // Hàm tiện ích: Kiểm tra xem tất cả các items trong tuần đã hoàn thành chưa
@@ -52,7 +55,7 @@ interface TaskGroupProps {
 }
 
 // TaskGroup component (ĐÃ SỬA LỖI TYPESCRIPT)
-const TaskGroup = ({ title, tasks, userProgress, onStart, taskType, isWeekDisabled }: TaskGroupProps) => {
+const TaskGroup = ({ title, tasks, userProgress, onStart, taskType, isWeekDisabled, missingDeckId, setMissingDeckId }: TaskGroupProps) => {
     if (!tasks || tasks.length === 0) return null;
     return (
         <div className="pt-2">
@@ -64,7 +67,7 @@ const TaskGroup = ({ title, tasks, userProgress, onStart, taskType, isWeekDisabl
                     const isEndOfAttempts = progress.status === 'END_OF_ATTEMPTS';                   
                     const isTitleClickable = (taskType === 'vocabulary' || taskType === 'grammar') && !isCompleted && !isWeekDisabled && !isEndOfAttempts;
                     const isClickable = !isWeekDisabled && !isCompleted && !isEndOfAttempts;
-                    
+                    const isMissing = missingDeckId === task.lesson_id;
                     return (
                         <div key={task.lesson_id} className="flex justify-between items-center p-3 bg-white rounded-2xl border border-slate-100 shadow-sm transition-all hover:border-blue-200 group">
                             
@@ -109,7 +112,27 @@ const TaskGroup = ({ title, tasks, userProgress, onStart, taskType, isWeekDisabl
                                     START
                                 </button>
                             )}
+                            {missingDeckId && (
+                                <div className="fixed inset-0 z-[9999] flex items-center justify-center">
+                                    <div className="bg-white p-8 rounded-[2.5rem] shadow-[0_20px_50px_rgba(0,0,0,0.1)] border border-indigo-100 max-w-sm w-full text-center animate-in fade-in zoom-in duration-300">
+                                        <div className="w-16 h-16 bg-indigo-100 rounded-2xl rotate-6 mx-auto mb-6 flex items-center justify-center shadow-sm">
+                                            <span className="text-3xl -rotate-6">💡</span>
+                                        </div>
+                                   
+                                        <p className="text-slate-500 text-sm font-medium mb-8 leading-relaxed">
+                                          Click Title to create Deck.
+                                        </p>
+                                        <button 
+                                            onClick={() => setMissingDeckId?.(null)}
+                                            className="w-full py-4 bg-indigo-600 hover:bg-indigo-700 text-white font-bold rounded-2xl shadow-lg shadow-indigo-100 transition-all active:scale-95 uppercase tracking-wider text-xs"
+                                        >
+                                            Đã hiểu
+                                        </button>
+                                    </div>
+                                </div>
+                            )}
                         </div>
+                        
                     );
                 })}
             </div>
@@ -125,6 +148,7 @@ export function RoadmapSection({ userLevel }: RoadmapSectionProps) {
     const [openStageIndex, setOpenStageIndex] = useState<number | null>(0);
     const [openWeekIndex, setOpenWeekIndex] = useState<{ [key: number]: number | null }>({ 0: 0 });
     const [lastProcessedWeek, setLastProcessedWeek] = useState<number | null>(null);
+    const [missingDeckId, setMissingDeckId] = useState<string | null>(null);
     
     // 🚨 HÀM TỔNG HỢP & CẢI THIỆN LỘ TRÌNH (LLM Call)
     
@@ -336,7 +360,14 @@ export function RoadmapSection({ userLevel }: RoadmapSectionProps) {
                 } 
             } else {
                 if (response.status === 404 && taskType === 'vocabulary' && !isTitleClick) {
-                    toast.error(`Bộ từ vựng chưa được tạo. Vui lòng click vào TIÊU ĐỀ task "${topicTitle}" để tạo Deck trước.`, { id: loadingId, duration: 6000 });
+// Tắt cái loading toast đang chạy để người dùng nhìn vào UI
+                toast.dismiss(loadingId); 
+                
+                // Lưu ID task bị lỗi để UI hiển thị thông báo bên dưới nó
+                setMissingDeckId(lessonId); 
+                
+                // Tự động ẩn sau 8 giây
+                setTimeout(() => setMissingDeckId(null), 8000);
                 } else if (response.status === 403) {
                      toast.error("Bạn đã hoàn thành bài học này.", { id: loadingId });
                 } else {
@@ -374,7 +405,7 @@ export function RoadmapSection({ userLevel }: RoadmapSectionProps) {
                 <div className="fixed inset-0 bg-white/60 z-[9999] flex items-center justify-center backdrop-blur-sm">
                     <div className="bg-white p-6 rounded-3xl shadow-2xl flex flex-col items-center">
                         <div className="w-12 h-12 border-4 border-blue-600 border-t-transparent rounded-full animate-spin"></div>
-                        <p className="mt-4 text-blue-600 font-bold">AI đang phân tích và tối ưu hóa lộ trình...</p>
+                        <p className="mt-4 text-blue-600 font-bold">AI is analyzing and optimizing the route...</p>
                     </div>
                 </div>
             )}
@@ -442,7 +473,7 @@ export function RoadmapSection({ userLevel }: RoadmapSectionProps) {
                                                 <div className="p-4 border-t space-y-6 animate-in duration-200">
                                                     {/* 🚨 TRUYỀN PROP KHÓA isWeekDisabled */}
                                                     <TaskGroup title="Grammar focus" tasks={week.grammar.items} userProgress={roadmap.userProgress} onStart={handleStartActivity} taskType='grammar' isWeekDisabled={isLocked} />
-                                                    <TaskGroup title="Vocabulary" tasks={week.vocabulary.items} userProgress={roadmap.userProgress} onStart={handleStartActivity} taskType='vocabulary' isWeekDisabled={isLocked} />
+                                                    <TaskGroup title="Vocabulary" tasks={week.vocabulary.items} userProgress={roadmap.userProgress} onStart={handleStartActivity} taskType='vocabulary' isWeekDisabled={isLocked} missingDeckId={missingDeckId} setMissingDeckId={setMissingDeckId} />
                                                     <TaskGroup title="Speaking skills" tasks={week.speaking.items} userProgress={roadmap.userProgress} onStart={handleStartActivity} taskType='speaking' isWeekDisabled={isLocked} />
                                                     
                                                     <div className="p-3 bg-blue-50/50 border border-blue-100 rounded-xl text-blue-700 text-[10px] font-semibold">

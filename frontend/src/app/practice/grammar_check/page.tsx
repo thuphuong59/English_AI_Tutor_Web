@@ -1,6 +1,7 @@
 "use client";
 import React, { useState } from "react";
-import { Copy, Trash2, ArrowLeft } from "lucide-react"; // Sử dụng lucide-react thay vì react-icons
+import { FiCopy, FiTrash2 } from "react-icons/fi";
+// import Navbar from "../../../components/Navbar";
 
 type GrammarError = {
   message: string;
@@ -13,21 +14,17 @@ export default function GrammarCheckPage() {
   const [answer, setAnswer] = useState("");
   const [errors, setErrors] = useState<GrammarError[]>([]);
   const [loading, setLoading] = useState(false);
-  const [checked, setChecked] = useState(false);
-
-  const primaryColor = "#0067C5";
-  const primaryHover = "#0052A3";
 
   const wordCount = answer.trim().split(/\s+/).filter(Boolean).length;
 
-  const checkGrammar = async () => {
-    if (!answer.trim()) return;
+  const checkGrammar = async (text: string) => {
+    if (!text.trim()) return;
     setLoading(true);
     try {
-      const res = await fetch("http://127.0.0.1:8000/api/grammar_check", {
+      const res = await fetch("http://127.0.0.1:8000/check_grammar", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ text: answer }),
+        body: JSON.stringify({ text }),
       });
 
       const data = await res.json();
@@ -38,12 +35,17 @@ export default function GrammarCheckPage() {
           length: e.length,
         }))
       );
-      setChecked(true);
     } catch (err) {
       console.error("Error checking grammar:", err);
     } finally {
       setLoading(false);
     }
+  };
+
+  const handleChange = (e: React.ChangeEvent<HTMLTextAreaElement>) => {
+    const newText = e.target.value;
+    setAnswer(newText);
+    checkGrammar(newText.trim());
   };
 
   const applySuggestion = (index: number, suggestion: string) => {
@@ -53,7 +55,7 @@ export default function GrammarCheckPage() {
     const newText = before + suggestion + after;
     setAnswer(newText);
     setErrors([]);
-    setChecked(false);
+    checkGrammar(newText);
   };
 
   const applyAllSuggestions = () => {
@@ -72,15 +74,16 @@ export default function GrammarCheckPage() {
 
     setAnswer(newText);
     setErrors([]);
-    setChecked(false);
+    checkGrammar(newText);
   };
 
+  // Hàm dismiss lỗi
   const dismissError = (index: number) => {
     setErrors((prev) => prev.filter((_, i) => i !== index));
   };
 
   const renderTextWithErrors = () => {
-    if (!checked || errors.length === 0) return <span>{answer}</span>;
+    if (errors.length === 0) return <span>{answer}</span>;
 
     const sortedErrors = [...errors].sort((a, b) => a.offset - b.offset);
     const elements: React.ReactNode[] = [];
@@ -90,13 +93,12 @@ export default function GrammarCheckPage() {
       const before = answer.slice(lastIndex, err.offset);
       const errorText = answer.slice(err.offset, err.offset + err.length);
 
-      if (before) elements.push(<span key={`before-${idx}`}>{before}</span>);
+      if (before) {
+        elements.push(<span key={`before-${idx}`}>{before}</span>);
+      }
 
       elements.push(
-        <span
-          key={`error-${idx}`}
-          className="bg-red-100 text-red-700 font-semibold px-1 rounded"
-        >
+        <span key={`error-${idx}`} className="text-red-600">
           {errorText}
         </span>
       );
@@ -112,133 +114,119 @@ export default function GrammarCheckPage() {
   };
 
   return (
-    <main className="min-h-screen bg-gradient-to-b from-gray-50 to-white flex flex-col items-center p-6">
-      
-      {/* Nút Back to Practice - Sử dụng thẻ a thay vì Link của Next.js */}
-      <div className="w-full max-w-7xl mb-6">
-        <a 
-          href="/practice" 
-          className="inline-flex items-center gap-2 text-gray-600 hover:text-[#0067C5] transition-colors font-medium group cursor-pointer"
-        >
-          <ArrowLeft size={20} className="group-hover:-translate-x-1 transition-transform" />
-          Back to Practice
-        </a>
-      </div>
-
-      <div className="flex flex-col lg:flex-row w-full max-w-7xl gap-6">
-        {/* Left Panel */}
-        <div className="flex-1 bg-white rounded-2xl shadow-lg p-6 flex flex-col">
-          <div className="flex justify-between items-center mb-3">
-            <span className="text-sm font-medium text-gray-500">Your Text</span>
+    <main className="min-h-screen bg-gray-50 flex flex-col">
+      {/* <Navbar /> */}
+      <div className="flex flex-1 p-8 gap-6">
+        {/* Left: Input */}
+        <div className="w-1/2 bg-white rounded-xl shadow-md p-6 flex flex-col">
+          <div className="flex justify-between items-center mb-2">
+            <span className="text-sm font-medium text-gray-600">English</span>
             {answer.trim() && (
               <div className="flex gap-2 text-gray-600">
                 <button
                   onClick={() => navigator.clipboard.writeText(answer)}
-                  className={`hover:text-[${primaryColor}] transition flex items-center gap-1`}
-                  title="Copy text"
+                  className="hover:text-blue-600 transition flex items-center gap-1"
                 >
-                  <Copy size={18} />
+                  <FiCopy size={18} />
+                  <span className="text-sm">Copy</span>
                 </button>
                 <button
                   onClick={() => {
                     setAnswer("");
                     setErrors([]);
-                    setChecked(false);
                   }}
                   className="hover:text-red-600 transition flex items-center gap-1"
-                  title="Clear text"
                 >
-                  <Trash2 size={18} />
+                  <FiTrash2 size={18} />
+                  <span className="text-sm">Delete</span>
                 </button>
               </div>
             )}
           </div>
 
-          <textarea
-            placeholder="Type your text here..."
-            className={`w-full resize-none border border-gray-300 rounded-xl p-4 text-lg focus:outline-none focus:ring-2 focus:ring-[${primaryColor}] transition mb-4`}
-            value={answer}
-            onChange={(e) => {
-              setAnswer(e.target.value);
-              setChecked(false);
-            }}
-            rows={12}
-          />
+          <hr className="border-t border-gray-200 mb-4" />
 
-          <button
-            onClick={checkGrammar}
-            className={`text-white py-3 rounded-xl font-semibold shadow-md transition mb-4 bg-[${primaryColor}] hover:bg-[${primaryHover}]`}
-          >
-            {loading ? "Checking..." : "Check Grammar"}
-          </button>
+          {/* Textarea & Rendered preview with red highlights */}
+          <div className="flex-1 overflow-auto max-h-[500px]">
+            <textarea
+              placeholder="Type your text here..."
+              className="w-full resize-none border-none outline-none text-lg mb-4"
+              value={answer}
+              onChange={handleChange}
+              rows={10}
+            />
 
-          <div className="bg-gray-50 p-4 rounded-xl text-sm leading-6 whitespace-pre-wrap border border-gray-100 shadow-inner min-h-[120px]">
-            {renderTextWithErrors()}
+            {/* Highlighted text below the textarea */}
+            <div className="bg-gray-100 p-4 rounded text-sm leading-6 whitespace-pre-wrap">
+              {renderTextWithErrors()}
+            </div>
           </div>
 
           <div className="text-sm text-gray-400 mt-2 flex justify-between">
             <span>
-              {answer.length}/2000 <strong className="text-gray-600 font-semibold">characters</strong>
+              {answer.length}/2000{" "}
+              <strong className="text-gray-600 font-semibold">characters</strong>
             </span>
             <span>
-              {wordCount} <strong className="text-gray-600 font-semibold">words</strong>
+              {wordCount}{" "}
+              <strong className="text-gray-600 font-semibold">words</strong>
             </span>
           </div>
         </div>
 
-        {/* Right Panel */}
-        <div className="flex-1 bg-white rounded-2xl shadow-lg p-6 flex flex-col">
+        {/* Right: Results */}
+        <div className="w-1/2 bg-gradient-to-b from-blue-50 to-white rounded-xl shadow-md p-6 flex flex-col">
           <div className="flex justify-between items-center mb-4">
-            <span className="text-lg font-semibold text-gray-700">Corrections</span>
-            {errors.length > 0 && (
-              <button
-                onClick={applyAllSuggestions}
-                className={`text-[${primaryColor}] font-medium hover:underline`}
-              >
-                Accept All
-              </button>
-            )}
+            <div className="flex gap-4 font-medium text-gray-600 items-center">
+              <span className="cursor-pointer border-b-2 border-black">Correct</span>
+              {errors.length > 0 && (
+                <button
+                  onClick={applyAllSuggestions}
+                  className="text-sm text-blue-600 hover:underline ml-4"
+                >
+                  Accept All
+                </button>
+              )}
+            </div>
           </div>
 
-          <div className="flex-1 overflow-auto max-h-[600px] space-y-4">
-            {checked && errors.length === 0 && answer && !loading && (
-              <div className="text-green-600 text-sm font-medium">
-                🎉 No grammar issues found!
-              </div>
+          {loading && <div className="text-blue-500 text-sm">Checking grammar...</div>}
+
+          <div className="flex-1 overflow-auto max-h-[500px] space-y-4">
+            {!loading && errors.length === 0 && answer && (
+              <div className="text-gray-400 text-sm">No grammar issues found.</div>
             )}
 
-            {checked && errors.length > 0 && !loading && (
+            {!loading && errors.length > 0 && (
               <ul className="space-y-4">
                 {errors.map((err, idx) => (
                   <li
                     key={idx}
-                    className="bg-gray-50 border border-gray-200 rounded-xl p-4 shadow-sm hover:shadow-md transition"
+                    className="bg-white border border-gray-200 rounded-lg p-4 shadow-sm"
                   >
-                    <p className="text-gray-700 mb-2">
-                      <span className="bg-red-100 text-red-700 font-semibold px-1 rounded">
+                    <p className="text-sm text-gray-800 mb-2">
+                      <span className="font-semibold text-red-600">
                         {answer.slice(err.offset, err.offset + err.length)}
                       </span>{" "}
                       – {err.message}
                     </p>
 
-                    <div className="flex items-center gap-3 flex-wrap">
+                    <div className="flex items-center gap-4">
                       {err.suggestions.length > 0 ? (
-                        err.suggestions.map((sug, i) => (
-                          <button
-                            key={i}
-                            onClick={() => applySuggestion(idx, sug)}
-                            className={`bg-[${primaryColor}] text-white px-3 py-1 rounded-full text-sm hover:bg-[${primaryHover}] transition shadow-sm`}
-                          >
-                            {sug}
-                          </button>
-                        ))
+                        <button
+                          onClick={() => applySuggestion(idx, err.suggestions[0])}
+                          className="text-blue-600 text-sm hover:underline"
+                        >
+                          {err.suggestions[0]}
+                        </button>
                       ) : (
-                        <span className="text-gray-400 text-sm">No suggestions</span>
+                        <p className="text-gray-400 text-sm">No suggestions</p>
                       )}
 
+                      {/* Nút Dismiss */}
                       <button
                         onClick={() => dismissError(idx)}
-                        className="ml-auto text-red-500 text-sm hover:underline"
+                        className="text-red-500 text-sm hover:underline ml-auto"
                       >
                         Dismiss
                       </button>
@@ -247,8 +235,6 @@ export default function GrammarCheckPage() {
                 ))}
               </ul>
             )}
-
-            {loading && <div className={`text-[${primaryColor}] text-sm`}>Checking grammar...</div>}
           </div>
         </div>
       </div>
