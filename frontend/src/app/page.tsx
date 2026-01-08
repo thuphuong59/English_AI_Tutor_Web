@@ -18,6 +18,8 @@ export default function HomePage() {
       const msg = localStorage.getItem("loginMessage");
       const type = localStorage.getItem("loginMessageType");
       if (msg) {
+        localStorage.removeItem("loginMessage");
+        localStorage.removeItem("loginMessageType");
         setNotifMessage(msg);
         setNotifType(type);
         setShowNotification(true);
@@ -51,8 +53,7 @@ export default function HomePage() {
           }, 250);
         }
 
-        localStorage.removeItem("loginMessage");
-        localStorage.removeItem("loginMessageType");
+
       }
     }, 500);
 

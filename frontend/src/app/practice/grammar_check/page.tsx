@@ -1,6 +1,9 @@
 "use client";
 import React, { useState } from "react";
 import { FiCopy, FiTrash2 } from "react-icons/fi";
+import { useEffect } from "react"; // Thêm useEffect
+import { useRouter } from "next/navigation"; // Thêm useRouter
+import { Loader2, LogIn } from "lucide-react"; // Import thêm icon
 // import Navbar from "../../../components/Navbar";
 
 type GrammarError = {
@@ -11,6 +14,16 @@ type GrammarError = {
 };
 
 export default function GrammarCheckPage() {
+  const router = useRouter();
+  const [hasToken, setHasToken] = useState<boolean | null>(null);
+  const [checkingLogin, setCheckingLogin] = useState(true);
+
+  useEffect(() => {
+      // Kiểm tra token trong localStorage hoặc sessionStorage
+      const token = localStorage.getItem("access_token") || sessionStorage.getItem("access_token");
+      setHasToken(!!token);
+      setCheckingLogin(false);
+  }, []);
   const [answer, setAnswer] = useState("");
   const [errors, setErrors] = useState<GrammarError[]>([]);
   const [loading, setLoading] = useState(false);
@@ -112,7 +125,30 @@ export default function GrammarCheckPage() {
 
     return elements;
   };
+  if (checkingLogin || hasToken === null) {
+      return (
+          <div className="h-screen flex items-center justify-center bg-slate-50">
+              <Loader2 className="animate-spin text-blue-600" size={40} />
+          </div>
+      );
+  }
 
+  // 2. Chặn truy cập nếu chưa đăng nhập
+  if (!hasToken) {
+      return (
+          <div className="h-screen flex flex-col items-center justify-center bg-slate-50 text-center px-4">
+              <LogIn className="text-blue-600 mb-4" size={48} />
+              <h1 className="text-xl font-bold mb-2">Login Required</h1>
+              <p className="text-gray-500 mb-6">Please sign in to use the Grammar Checker.</p>
+              <button 
+                  onClick={() => router.push("/auth")} 
+                  className="px-8 py-2 bg-blue-600 text-white rounded-xl font-semibold"
+              >
+                  Sign In Now
+              </button>
+          </div>
+      );
+  }
   return (
     <main className="min-h-screen bg-gray-50 flex flex-col">
       {/* <Navbar /> */}

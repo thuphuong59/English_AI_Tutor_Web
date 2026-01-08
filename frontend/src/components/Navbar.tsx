@@ -100,7 +100,7 @@ export default function Navbar() {
                       style={{ color: primaryColor }}
                       onClick={() => setMenuOpen(false)}
                     >
-                      <FiUser /> Profile
+                      <FiUser /> Roadmap
                     </Link>
                     <Link
                       href="/settings"
@@ -108,7 +108,7 @@ export default function Navbar() {
                       style={{ color: primaryColor }}
                       onClick={() => setMenuOpen(false)}
                     >
-                      <FiSettings /> Settings
+                      <FiSettings /> Profiles
                     </Link>
                     <button
                       onClick={handleLogout}
@@ -167,7 +167,7 @@ export default function Navbar() {
                     style={{ color: primaryColor }}
                     onClick={() => setMobileMenuOpen(false)}
                   >
-                    <FiUser /> Profile
+                    <FiUser /> Roadmap
                   </Link>
                 </li>
                 <li>
@@ -177,7 +177,7 @@ export default function Navbar() {
                     style={{ color: primaryColor }}
                     onClick={() => setMobileMenuOpen(false)}
                   >
-                    <FiSettings /> Settings
+                    <FiSettings /> Profile
                   </Link>
                 </li>
                 <li>

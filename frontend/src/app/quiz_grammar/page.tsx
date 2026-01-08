@@ -218,8 +218,8 @@ export default function QuizPage() {
         <main className="min-h-screen bg-gray-50 py-8 px-6">
             {showLoading && (
                 <LoadingModal
-                    title="Đang chấm điểm và phân tích..."
-                    message="Đang đánh giá kết quả và cập nhật tiến độ. Vui lòng chờ."
+                    title="Grading and Analyzing..."
+                    message="Evaluating your results and updating progress. Please wait."
                 />
             )}
 

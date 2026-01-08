@@ -126,9 +126,9 @@ async def get_profile_service(current_user):
                 "email": current_user.email,
                 "username": profile_data.get("username", "Người dùng"),
                 "avatar_url": profile_data.get("avatar_url"),
-                "level": "Chưa có",
-                "current_goal": "Chưa có",
-                "current_duration": "Chưa có",
+                "level": "Loading...",
+                "current_goal": "Loading...",
+                "current_duration": "Loading...",
                 "learner_type": "Beginner Learner",
             }
 

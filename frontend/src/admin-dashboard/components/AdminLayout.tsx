@@ -25,7 +25,10 @@ const AdminLayout: React.FC<AdminLayoutProps> = ({ children }) => {
 
     const handleLogout = () => {
         if (typeof window !== 'undefined') {
-            localStorage.removeItem('adminToken');
+            localStorage.removeItem("access_token");
+            localStorage.removeItem("token_type");
+            localStorage.removeItem("authenticatedUserId"); // Xóa ID khi đăng xuất
+            document.cookie = "access_token=; Max-Age=0; path=/;";
             window.location.href = '/auth'; 
         }
     };
